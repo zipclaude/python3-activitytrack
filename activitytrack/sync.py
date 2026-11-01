@@ -153,3 +153,73 @@ class SyncEngine:
             if answer.get("more") is not True:
                 return count
         return count
+
+
+POLICY_EVERY_S = 300
+
+
+class Runner:
+    """
+    One run of the sync as every interface does it: a check of sync/head
+    unless [full] (a pull only when the server moved), the push and the
+    pull, then the user's policy (server SYNC.md §8; asked again every 5
+    minutes, as a policy change does not move the revision). The outcome
+    is a state — ok, idle, offline, failed, revoked, incompatible,
+    unpaired — and a detail; revoked and incompatible stay in the store.
+    """
+
+    def __init__(self, session):
+        self.session = session
+        self._policy_at = 0
+
+    def run(self, full=True):
+        http = self.session.http()
+        if http is None:
+            return "unpaired", ""
+        store = self.session.store
+        engine = SyncEngine(store, http)
+        try:
+            if not full and not store.has_pending():
+                head = engine.head()
+                if head.get("rev") == store.cursor:
+                    store.set_state("incompatible", None)
+                    changed = self.policy(http, force=False)
+                    return ("ok" if changed else "idle"), ""
+            result = engine.sync()
+            store.set_state("incompatible", None)
+            self.policy(http, force=True)
+            return "ok", (result.errors[0] if result.errors else "")
+        except SyncRevoked:
+            store.set_state("revoked", True)
+            return "revoked", ""
+        except SyncIncompatible as e:
+            store.set_state("incompatible", e.code)
+            return "incompatible", e.code
+        except NetworkError as e:
+            return "offline", str(e)
+        except SyncFailed as e:
+            return "failed", str(e)
+        except Exception as e:
+            return "failed", f"{type(e).__name__}: {e}"
+
+    def policy(self, http, force=True):
+        """The user's policy; True when it changed. A text that is no policy keeps the last one."""
+        from .policy import Policy
+        now = time.monotonic()
+        if not force and now - self._policy_at < POLICY_EVERY_S:
+            return False
+        self._policy_at = now
+        reply = http.send("GET", "policy")
+        if reply.status != 200:
+            return False
+        try:
+            text = json.loads(reply.body).get("policy")
+        except (ValueError, AttributeError):
+            return False
+        if text is not None and Policy.parse(text) is None:
+            return False
+        store = self.session.store
+        if text == store.get_state("policy"):
+            return False
+        store.set_state("policy", text)
+        return True

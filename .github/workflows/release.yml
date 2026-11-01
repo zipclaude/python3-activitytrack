@@ -1,0 +1,103 @@
+name: Release
+
+# A tag vX.Y.Z builds the Debian/Ubuntu packages (pybuild, with the tests),
+# tries them and publishes the GitHub Release. Pull requests touching the
+# packaging try the packages too.
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+    paths: ["debian/**", "pyproject.toml", ".github/workflows/release.yml"]
+  workflow_dispatch:
+
+jobs:
+  deb:
+    runs-on: ubuntu-latest
+    container: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { image: "debian:trixie", suffix: deb13 }
+          - { image: "debian:forky", suffix: deb14 }
+          - { image: "ubuntu:24.04", suffix: ubuntu24.04 }
+          - { image: "ubuntu:26.04", suffix: ubuntu26.04 }
+    steps:
+      - name: Build tools
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates git \
+            build-essential devscripts equivs lintian
+      - uses: actions/checkout@v4
+      - name: Version
+        run: |
+          V=$(sed -n 's/^__version__ = "\(.*\)"/\1/p' activitytrack/__init__.py)
+          case "$GITHUB_REF" in refs/tags/v*) test "v$V" = "${GITHUB_REF#refs/tags/}" ;; esac
+          DV=$(echo "$V" | tr '-' '~')
+          grep -q "^python-activitytrack ($DV)" debian/changelog
+          sed -i "1s/($DV)/($DV~${{ matrix.suffix }})/" debian/changelog
+          head -1 debian/changelog
+      - name: Build dependencies
+        run: DEBIAN_FRONTEND=noninteractive mk-build-deps -i -r -t "apt-get -y --no-install-recommends" debian/control
+      - name: Package (with the tests)
+        run: |
+          dpkg-buildpackage -b -us -uc
+          mkdir dist && mv ../python3-activitytrack_*.deb dist/
+          dpkg-deb --info dist/*.deb
+          dpkg-deb --contents dist/*.deb
+      - name: Lintian
+        run: lintian --fail-on error --no-tag-display-limit dist/*.deb
+      - name: Install and import
+        run: |
+          DEBIAN_FRONTEND=noninteractive apt-get install -y ./dist/*.deb
+          cd / && python3 -c "import activitytrack, activitytrack.sync, activitytrack.work; print(activitytrack.__version__, activitytrack.__file__)"
+          ls /usr/lib/python3/dist-packages/activitytrack/locale/
+      - name: Remove
+        run: |
+          apt-get purge -y python3-activitytrack
+          ! python3 -c "import activitytrack" 2>/dev/null
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deb-${{ matrix.suffix }}
+          path: dist/*.deb
+
+  tarball:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tarball
+        run: |
+          V=$(sed -n 's/^__version__ = "\(.*\)"/\1/p' activitytrack/__init__.py)
+          mkdir dist
+          git archive --prefix="python3-activitytrack-$V/" -o "dist/python3-activitytrack-$V.tar.gz" HEAD
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tarball
+          path: dist/*.tar.gz
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [deb, tarball]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { path: artifacts, merge-multiple: true }
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V="${GITHUB_REF#refs/tags/v}"
+          cd artifacts
+          for f in python3-activitytrack_*~*_all.deb; do mv "$f" "$(echo "$f" | tr '~' '-')"; done
+          sha256sum * > SHA256SUMS && cat SHA256SUMS && cd ..
+          {
+            echo "python3-activitytrack $V: the library of ActivityTrack on the PC (desktop, cli, tui)."
+            echo
+            echo "- Debian 13 / 14, Ubuntu 24.04 / 26.04: \`apt install ./python3-activitytrack_${V}-<distro>_all.deb\`"
+            echo "- Elsewhere: \`pip install git+https://github.com/${GITHUB_REPOSITORY}@v$V\`"
+          } > notes.md
+          case "$V" in *-*) pre=--prerelease ;; *) pre= ;; esac
+          gh release create "v$V" artifacts/* --title "python3-activitytrack $V" --notes-file notes.md $pre

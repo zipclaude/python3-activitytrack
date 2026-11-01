@@ -1,0 +1,34 @@
+Source: python-activitytrack
+Section: python
+Priority: optional
+Maintainer: ActivityTrack <flavio-claude@zipman.it>
+Build-Depends: debhelper-compat (= 13),
+ dh-sequence-python3,
+ pybuild-plugin-pyproject,
+ python3-all,
+ python3-setuptools,
+ python3-cryptography <!nocheck>,
+ python3-keyring <!nocheck>
+Standards-Version: 4.7.0
+Homepage: https://github.com/zipclaude/python3-activitytrack
+Vcs-Git: https://github.com/zipclaude/python3-activitytrack.git
+Vcs-Browser: https://github.com/zipclaude/python3-activitytrack
+Testsuite: autopkgtest-pkg-pybuild
+Rules-Requires-Root: no
+
+Package: python3-activitytrack
+Architecture: all
+Depends: ${misc:Depends}, ${python3:Depends}
+Description: ActivityTrack on the PC - rules, local copy and sync (Python 3)
+ ActivityTrack records the work of freelancers and technicians: activities,
+ travels, pauses and to-dos, on the Android app, on a web server of one's
+ own and on the PC.
+ .
+ This library holds what the PC interfaces share: the rules of activities
+ and to-dos as the app's, the local copy in SQLite, the sync with
+ ActivityTrack Web as a paired device, the policy, the reminders' planner
+ and the translations. The desktop tray application, the command line and
+ the text interface depend on it; they share one data folder and one
+ pairing.
+ .
+ This package installs the library for Python 3.

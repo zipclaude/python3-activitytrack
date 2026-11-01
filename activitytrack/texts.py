@@ -159,3 +159,27 @@ def sync_state(session, state="idle", detail=""):
 def sync_needs_attention(session, state="idle"):
     return bool(session.account is None or session.store.get_state("revoked")
                 or session.store.get_state("incompatible") or state == "failed")
+
+
+def entry_commands(entry, policy):
+    """[(label, command)] the state allows, as the app's card buttons (every interface)."""
+    from .work import STOP, SUSPEND
+    status, mode = entry.get("status"), entry.get("mode")
+    travel = policy.feature("travel")
+    out = []
+    if status == ACTIVE:
+        if mode != WORK:
+            out.append((_("Riprendi") if mode == PAUSE else _("Lavoro"), WORK))
+        if mode != PAUSE:
+            out.append((_("Pausa"), PAUSE))
+        if mode != TRAVEL and travel:
+            out.append((_("Viaggio"), TRAVEL))
+        if mode != PAUSE:
+            out.append((_("Sospendi"), SUSPEND))
+        out.append((_("Stop"), STOP))
+    elif status == SUSPENDED:
+        out.append((_("Riprendi"), WORK))
+        if travel:
+            out.append((_("Viaggio"), TRAVEL))
+        out.append((_("Stop"), STOP))
+    return out

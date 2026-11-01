@@ -7,7 +7,7 @@ pairing and the token.
 """
 
 # aligned with the app, the web and the interfaces
-__version__ = "0.9.4-beta2"
+__version__ = "0.9.4-beta3"
 
 # who calls the server (headers, User-Agent): the interface sets it at start
 _client = {"name": "ActivityTrack", "version": __version__}

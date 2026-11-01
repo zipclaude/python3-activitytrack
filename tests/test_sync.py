@@ -138,3 +138,43 @@ class SyncTest(unittest.TestCase):
         self.server.status = None
         self.engine.sync()
         self.assertFalse(self.store.has_pending())
+
+
+class _Session:
+    def __init__(self, store, http):
+        self.store, self._http = store, http
+
+    def http(self):
+        return self._http
+
+
+class RunnerTest(unittest.TestCase):
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.store = Store(Path(self.dir.name) / "data.sqlite3")
+        self.server = FakeServer()
+
+    def tearDown(self):
+        self.store.close()
+        self.dir.cleanup()
+
+    def test_the_states(self):
+        from activitytrack.net import NetworkError
+        from activitytrack.sync import Runner
+        self.assertEqual(Runner(_Session(self.store, None)).run(), ("unpaired", ""))
+        r = Runner(_Session(self.store, self.server))
+        self.server.put("todo", "t1", {"title": "x"})
+        self.assertEqual(r.run(full=False), ("ok", ""))
+        # nothing moved: head only
+        self.assertEqual(r.run(full=False), ("idle", ""))
+        self.server.status = 426
+        self.assertEqual(r.run(), ("incompatible", "app_too_old"))
+        self.assertEqual(self.store.get_state("incompatible"), "app_too_old")
+        self.server.status = 401
+        self.assertEqual(r.run(), ("revoked", ""))
+        self.assertTrue(self.store.get_state("revoked"))
+
+        class Down:
+            def send(self, *a):
+                raise NetworkError("no route")
+        self.assertEqual(Runner(_Session(self.store, Down())).run(), ("offline", "no route"))

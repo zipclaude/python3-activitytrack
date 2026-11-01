@@ -1,0 +1,10 @@
+python-activitytrack (0.9.4~beta2) unstable; urgency=medium
+
+  * First release: the rules, the local copy, the sync, the policy, the
+    reminders' planner and the translations of ActivityTrack Desktop
+    0.9.4-beta1, shared with the command line and the text interface. One
+    data folder (~/.local/share/activitytrack, %APPDATA%\activitytrack) and
+    one pairing for every interface; the desktop's folder and keyring entry
+    of 0.9.4-beta1 move there at the first start.
+
+ -- ActivityTrack <flavio-claude@zipman.it>  Sun, 01 Nov 2026 22:30:00 +0100

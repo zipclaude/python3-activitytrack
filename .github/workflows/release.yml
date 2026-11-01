@@ -34,8 +34,11 @@ jobs:
           V=$(sed -n 's/^__version__ = "\(.*\)"/\1/p' activitytrack/__init__.py)
           case "$GITHUB_REF" in refs/tags/v*) test "v$V" = "${GITHUB_REF#refs/tags/}" ;; esac
           DV=$(echo "$V" | tr '-' '~')
-          grep -q "^python-activitytrack ($DV)" debian/changelog
-          sed -i "1s/($DV)/($DV~${{ matrix.suffix }})/" debian/changelog
+          # the package: that version and a Debian revision, 1.1.0~beta.1-1
+          PV=$(dpkg-parsechangelog -S Version)
+          test "$(dpkg-parsechangelog -S Source)" = python-activitytrack && test "${PV%-*}" = "$DV" && test "$PV" != "$DV"
+          # the distribution goes in the revision: 1.1.0~beta.1-1~deb13 still satisfies (>= 1.1.0~beta.1)
+          sed -i "1s/($PV)/($PV~${{ matrix.suffix }})/" debian/changelog
           head -1 debian/changelog
       - name: Build dependencies
         run: DEBIAN_FRONTEND=noninteractive mk-build-deps -i -r -t "apt-get -y --no-install-recommends" debian/control
@@ -91,13 +94,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           V="${GITHUB_REF#refs/tags/v}"
+          R=$(dpkg-parsechangelog -S Version) && R="${R##*-}"   # the Debian revision
           cd artifacts
           for f in python3-activitytrack_*~*_all.deb; do mv "$f" "$(echo "$f" | tr '~' '-')"; done
           sha256sum * > SHA256SUMS && cat SHA256SUMS && cd ..
           {
             echo "python3-activitytrack $V: the library of ActivityTrack on the PC (desktop, cli, tui)."
             echo
-            echo "- Debian 13 / 14, Ubuntu 24.04 / 26.04: \`apt install ./python3-activitytrack_${V}-<distro>_all.deb\`"
+            echo "- Debian 13 / 14, Ubuntu 24.04 / 26.04: \`apt install ./python3-activitytrack_${V}-${R}-<distro>_all.deb\`"
             echo "- Elsewhere: \`pip install git+https://github.com/${GITHUB_REPOSITORY}@v$V\`"
           } > notes.md
           case "$V" in *-*) pre=--prerelease ;; *) pre= ;; esac

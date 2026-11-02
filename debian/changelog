@@ -1,3 +1,15 @@
+python-activitytrack (0.9.4~beta5-1) unstable; urgency=medium
+
+  * Security review fixes: the sync never dies on a refused address; no
+    state write for an unchanged value; --dev allows http:// only for
+    local addresses; the data folder's migration race; a certificate the
+    library cannot read is a certificate error; keyring errors logged and
+    the token file written as UTF-8 without following links; every
+    thread's database connection closed.
+  * cryptography >= 41.
+
+ -- ActivityTrack <flavio-claude@zipman.it>  Mon, 02 Nov 2026 18:53:45 +0100
+
 python-activitytrack (0.9.4~beta4-1) unstable; urgency=medium
 
   * Dates and times as the user prefers them: European, American or ISO;

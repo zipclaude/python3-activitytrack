@@ -27,6 +27,8 @@ class InputError(Exception):
 class App:
     def __init__(self, folder, dev=False):
         self.session = Session(folder, allow_http=dev)
+        # dates and times as chosen on the desktop (Settings → Generale)
+        formats.load(self.session.store)
         self.work = Work(self.session.store, stored(self.session.store), zone=local_zone())
         self.todos = Todos(self.work)
         self.runner = Runner(self.session)
@@ -40,7 +42,9 @@ class App:
         return self.session.account is not None
 
     def refresh_policy(self):
+        """The policy, and the formats, after a sync or another interface's change."""
         self.work.policy = stored(self.store)
+        formats.load(self.store)
 
     def sync(self, full=True):
         """(state, detail) of one run; the policy may have changed."""

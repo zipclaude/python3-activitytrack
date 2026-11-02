@@ -35,6 +35,18 @@ class FormatsTest(unittest.TestCase):
             self.assertEqual((formats.date_format(), formats.time_format()), (formats.US, formats.H12))
             store.close()
 
+    def test_the_app_loads_and_refreshes_them(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            a = app_module.App(tmp)
+            self.assertEqual(formats.date_format(), formats.EU)
+            other = Store(Path(tmp) / "activitytrack.sqlite3")
+            formats.save(other, formats.ISO, formats.H12)
+            formats.set_formats(formats.EU, formats.H24)
+            a.refresh_policy()
+            self.assertEqual((formats.date_format(), formats.time_format()), (formats.ISO, formats.H12))
+            other.close()
+            a.store.close()
+
     def test_texts_and_parsers_follow_the_choice(self):
         formats.set_formats(formats.US, formats.H12)
         today = date(2026, 11, 2)

@@ -51,6 +51,19 @@ class WorkTest(unittest.TestCase):
         with self.assertRaises(WorkError):
             transition(ACTIVE, PAUSE, SUSPEND)
 
+    def test_busy_minutes_of_a_day(self):
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+
+        rome = ZoneInfo("Europe/Rome")
+        at = lambda h, m=0: int(datetime(2026, 11, 2, h, m, tzinfo=rome).timestamp() * 1000)  # noqa: E731
+        self.now = at(16)
+        self.start(start_ms=at(9), end_ms=at(10, 30))
+        running = self.start(start_ms=at(15))
+        seg = self.work.open_segment(running)
+        self.assertEqual(self.work.busy(datetime(2026, 11, 2).date()), [(540, 630), (900, 960)])
+        self.assertEqual(self.work.busy(datetime(2026, 11, 2).date(), skip=seg["uid"]), [(540, 630)])
+
     def test_start_pause_stop(self):
         uid = self.start()
         e = self.store.get("entry", uid)

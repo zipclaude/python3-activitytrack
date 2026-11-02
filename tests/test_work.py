@@ -197,7 +197,8 @@ class WorkTest(unittest.TestCase):
         self.now += 10 * MIN
         self.work.policy = policy(features={"concurrentEntries": False})
         self.work.command(a, WORK)
-        self.assertEqual((self.store.get("entry", a)["status"], self.store.get("entry", b)["status"]), (ACTIVE, SUSPENDED))
+        status = lambda uid: self.store.get("entry", uid)["status"]  # noqa: E731
+        self.assertEqual((status(a), status(b)), (ACTIVE, SUSPENDED))
         self.work.command(a, PAUSE)
         self.now += 10 * MIN
         self.work.command(b, TRAVEL)

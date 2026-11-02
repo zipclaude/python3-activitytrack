@@ -89,4 +89,3 @@ def placeholder():
 def day_order(a, b):
     """Two numbers of a short date (3/11) as (day, month), in the user's order."""
     return (b, a) if _current["date"] == US else (a, b)
-

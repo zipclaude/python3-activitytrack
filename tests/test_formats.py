@@ -18,7 +18,7 @@ class FormatsTest(unittest.TestCase):
         self.assertEqual(formats.minutes(18 * 60 + 30), "18:30")
         formats.set_formats(formats.US, formats.H12)
         self.assertEqual((formats.day(d), formats.day(d, year=False)), ("12/31/2026", "12/31"))
-        self.assertEqual((formats.minutes(18 * 60 + 30), formats.minutes(0), formats.minutes(12 * 60)), ("6:30 PM", "12:00 AM", "12:00 PM"))
+        self.assertEqual([formats.minutes(m) for m in (18 * 60 + 30, 0, 12 * 60)], ["6:30 PM", "12:00 AM", "12:00 PM"])
         self.assertEqual((formats.hour(0), formats.hour(13)), ("12 AM", "1 PM"))
         self.assertEqual((formats.qt_date(), formats.qt_time()), ("MM/dd/yyyy", "h:mm AP"))
         formats.set_formats(formats.ISO, "xx")

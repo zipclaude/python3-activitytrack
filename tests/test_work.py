@@ -202,6 +202,22 @@ class WorkTest(unittest.TestCase):
         self.assertEqual([ref_kind(v) for v in ("https://j.example/OPS-1", "OPS-42", "#12", "PO 2026/Q4")],
                          ["URL", "TICKET", "TICKET", "OTHER"])
 
+    def test_resume_suspends_the_others_without_concurrent_entries(self):
+        a = self.start()
+        self.now += 10 * MIN
+        self.work.command(a, SUSPEND)
+        b = self.start()
+        self.now += 10 * MIN
+        self.work.policy = policy(features={"concurrentEntries": False})
+        self.work.command(a, WORK)
+        status = lambda uid: self.store.get("entry", uid)["status"]  # noqa: E731
+        self.assertEqual((status(a), status(b)), (ACTIVE, SUSPENDED))
+        self.work.command(a, PAUSE)
+        self.now += 10 * MIN
+        self.work.command(b, TRAVEL)
+        self.assertEqual(self.store.get("entry", b)["status"], ACTIVE)
+        self.assertIn(self.store.get("entry", a)["status"], (TO_COMPLETE, CLOSED))
+
 
 class PolicyTest(unittest.TestCase):
     def test_parse(self):

@@ -1,3 +1,14 @@
+python-activitytrack (0.9.4~beta4-1) unstable; urgency=medium
+
+  * Dates and times as the user prefers them: European, American or ISO;
+    24 or 12 hours (module formats, kept in the local copy for every
+    interface; web issue #38).
+  * The app's 5-minute time grid rules (module timegrid, Work.busy).
+  * Without concurrent entries resuming an activity suspends the others,
+    as a new start does (app issue #132).
+
+ -- ActivityTrack <flavio-claude@zipman.it>  Mon, 02 Nov 2026 15:50:04 +0100
+
 python-activitytrack (0.9.4~beta3-1) unstable; urgency=medium
 
   * A Debian revision in the version, the distribution in it

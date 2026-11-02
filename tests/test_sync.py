@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
@@ -35,9 +36,11 @@ class SyncTest(unittest.TestCase):
     def test_a_local_change_is_pushed_and_settled(self):
         self.store.write("entry", "e1", {"activity": "Patch", "status": "ACTIVE"}, now_ms=900)
         self.assertTrue(self.store.get("entry", "e1")["_pending"])
+        self.assertEqual(self.store.pending_count(), 1)
         result = self.engine.sync()
         self.assertEqual(result.pushed, 1)
         self.assertFalse(self.store.has_pending())
+        self.assertEqual(self.store.pending_count(), 0)
         self.assertEqual(self.server.records[("entry", "e1")]["fields"]["activity"], "Patch")
         self.assertEqual(self.server.records[("entry", "e1")]["clock"]["status"], 900)
         e = self.store.get("entry", "e1")
@@ -151,7 +154,8 @@ class _Session:
 class RunnerTest(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.TemporaryDirectory()
-        self.store = Store(Path(self.dir.name) / "data.sqlite3")
+        self.store_file = Path(self.dir.name) / "data.sqlite3"
+        self.store = Store(self.store_file)
         self.server = FakeServer()
 
     def tearDown(self):
@@ -178,3 +182,32 @@ class RunnerTest(unittest.TestCase):
             def send(self, *a):
                 raise NetworkError("no route")
         self.assertEqual(Runner(_Session(self.store, Down())).run(), ("offline", "no route"))
+
+    def test_an_account_that_cannot_connect_is_a_state(self):
+        from activitytrack.net import NetworkError
+        from activitytrack.sync import Runner
+
+        class Refused(_Session):
+            def http(self):
+                raise NetworkError("not https")
+        # not an exception in the caller's thread
+        self.assertEqual(Runner(Refused(self.store, None)).run(), ("failed", "not https"))
+
+    def test_an_offline_run_does_not_touch_the_data(self):
+        from activitytrack.net import NetworkError
+        from activitytrack.sync import Runner
+
+        class Down:
+            def send(self, *a):
+                raise NetworkError("no route")
+        r = Runner(_Session(self.store, Down()))
+        self.store.set_state("x", 1)
+        r.run()
+        other = sqlite3.connect(self.store_file)
+        before = other.execute("PRAGMA data_version").fetchone()[0]
+        # the same error again writes nothing: the other interfaces see no change
+        self.assertEqual(r.run(), ("offline", "no route"))
+        self.assertEqual(other.execute("PRAGMA data_version").fetchone()[0], before)
+        self.store.set_state("x", 2)
+        self.assertNotEqual(other.execute("PRAGMA data_version").fetchone()[0], before)
+        other.close()

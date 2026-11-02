@@ -116,6 +116,7 @@ def pair_error(code):
         pairing.NOT_A_LINK: _("Non è un collegamento di associazione: copialo dalla pagina «Dispositivi» del web."),
         pairing.VERSION: _("Collegamento di una versione che questa app non conosce: aggiorna ActivityTrack sul PC."),
         pairing.NOT_HTTPS: _("Il server deve usare HTTPS."),
+        pairing.NOT_LOCAL: _("http:// è permesso solo per un server locale (localhost o una rete privata)."),
         pairing.BAD_PIN: _("Il collegamento è incompleto: copialo di nuovo."),
         pairing.INVALID_CODE: _("Codice scaduto o già usato: creane un altro dalla pagina web."),
         pairing.USER_DISABLED: _("Il tuo utente non può sincronizzare: chiedi all'amministratore."),

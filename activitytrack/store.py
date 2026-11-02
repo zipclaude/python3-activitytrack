@@ -45,17 +45,32 @@ class Store:
     def __init__(self, path):
         self.path = str(path)
         self._local = threading.local()
-        # executescript commits by itself: not inside transaction()
-        self.db.executescript(SCHEMA)
+        # every thread's connection, so that close() closes them all (Windows keeps
+        # the file of an open one: the data folder could not be removed)
+        self._all = []
+        self._lock = threading.Lock()
+        try:
+            # executescript commits by itself: not inside transaction()
+            self.db.executescript(SCHEMA)
+        except BaseException:
+            self.close()
+            raise
 
     @property
     def db(self):
         db = getattr(self._local, "db", None)
         if db is None:
-            db = sqlite3.connect(self.path, isolation_level=None, timeout=30)
-            db.row_factory = sqlite3.Row
-            db.execute("PRAGMA journal_mode=WAL")
-            db.execute("PRAGMA foreign_keys=ON")
+            # each connection stays with its thread; closing it from another one is close()'s only use
+            db = sqlite3.connect(self.path, isolation_level=None, timeout=30, check_same_thread=False)
+            try:
+                db.row_factory = sqlite3.Row
+                db.execute("PRAGMA journal_mode=WAL")
+                db.execute("PRAGMA foreign_keys=ON")
+            except BaseException:
+                db.close()
+                raise
+            with self._lock:
+                self._all.append(db)
             self._local.db = db
         return db
 
@@ -74,10 +89,12 @@ class Store:
         db.execute("COMMIT")
 
     def close(self):
-        db = getattr(self._local, "db", None)
-        if db is not None:
+        """Every thread's connection: the store is not used afterwards."""
+        with self._lock:
+            connections, self._all = self._all, []
+        for db in connections:
             db.close()
-            self._local.db = None
+        self._local.db = None
 
     # state
 
@@ -86,8 +103,12 @@ class Store:
         return default if row is None else json.loads(row[0])
 
     def set_state(self, key, value):
+        text = json.dumps(value)
         with self.transaction() as db:
-            db.execute("INSERT OR REPLACE INTO state (key, value) VALUES (?, ?)", (key, json.dumps(value)))
+            row = db.execute("SELECT value FROM state WHERE key = ?", (key,)).fetchone()
+            # the same value is not written again: a write tells the other interfaces the data changed
+            if row is None or row[0] != text:
+                db.execute("INSERT OR REPLACE INTO state (key, value) VALUES (?, ?)", (key, text))
 
     @property
     def cursor(self):
@@ -157,6 +178,9 @@ class Store:
 
     def pending(self, limit):
         return self.db.execute("SELECT * FROM pending ORDER BY seq LIMIT ?", (limit,)).fetchall()
+
+    def pending_count(self):
+        return self.db.execute("SELECT COUNT(*) FROM pending").fetchone()[0]
 
     def has_pending(self):
         return self.db.execute("SELECT 1 FROM pending LIMIT 1").fetchone() is not None

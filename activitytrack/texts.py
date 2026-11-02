@@ -3,6 +3,7 @@
 
 from datetime import datetime
 
+from . import formats
 from .i18n import _
 from .work import ACTIVE, CLOSED, PAUSE, SUSPENDED, TO_COMPLETE, TRAVEL, WORK
 
@@ -79,12 +80,12 @@ def clock(ms):
     """The local time of day of an instant, with the date when not today."""
     t = datetime.fromtimestamp(ms / 1000)
     if t.date() == datetime.now().date():
-        return t.strftime("%H:%M")
-    return t.strftime("%d/%m %H:%M")
+        return formats.time(t)
+    return f"{formats.day(t.date(), year=False)} {formats.time(t)}"
 
 
 def todo_when(t, tz):
-    """When a to-do is planned or due, as the app's rows: "lun 02/11 15:00–15:30", "scad. gio 05/11"."""
+    """When a to-do is planned or due, as the app's rows: "lun 02/11 15:00–15:30", "scad. gio 05/11" (formats)."""
     from .todos import plan_bounds, _day
     days = (_("lun"), _("mar"), _("mer"), _("gio"), _("ven"), _("sab"), _("dom"))
     plan = plan_bounds(t, tz)
@@ -92,16 +93,16 @@ def todo_when(t, tz):
     if plan:
         start, end, all_day = plan
         d = start.date()
-        day = "" if d == today else f"{days[d.weekday()]} {d.strftime('%d/%m')}"
+        day = "" if d == today else f"{days[d.weekday()]} {formats.day(d, year=False)}"
         if all_day:
             return day or _("oggi")
-        span = start.strftime("%H:%M") + (("–" + end.strftime("%H:%M")) if end > start else "")
+        span = formats.time(start) + (("–" + formats.time(end)) if end > start else "")
         return f"{day} {span}".strip()
     due = _day(t.get("dueDate"))
     if due:
-        text = _("scad. %s") % f"{days[due.weekday()]} {due.strftime('%d/%m')}"
+        text = _("scad. %s") % f"{days[due.weekday()]} {formats.day(due, year=False)}"
         if t.get("dueTimeMin") is not None:
-            text += f" {t['dueTimeMin'] // 60:02d}:{t['dueTimeMin'] % 60:02d}"
+            text += " " + formats.minutes(t["dueTimeMin"])
         return text
     return ""
 
@@ -152,7 +153,7 @@ def sync_state(session, state="idle", detail=""):
         return _("Sincronizzazione non riuscita: %s") % detail
     last = store.get_state("last_sync")
     if last:
-        return _("Sincronizzato alle %s") % datetime.fromtimestamp(last / 1000).strftime("%H:%M")
+        return _("Sincronizzato alle %s") % formats.time(datetime.fromtimestamp(last / 1000))
     return _("In attesa della prima sincronizzazione…")
 
 

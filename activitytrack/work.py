@@ -15,7 +15,9 @@ import re
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
+from . import timegrid
 from .policy import Policy
 from .sync import now_ms
 
@@ -150,6 +152,16 @@ class Work:
     def segments(self, entry_uid):
         segs = [s for s in self.store.all("segment") if s.get("entryUid") == entry_uid]
         return sorted(segs, key=lambda s: (s.get("startUtcMs") or 0, s.get("endUtcMs") or 2 ** 62))
+
+    def busy(self, day, skip=None):
+        """The minutes of a day taken by the activities, for the time grid's hatched cells."""
+        live = {e["uid"] for e in self.entries()}
+        segs = [s for s in self.store.all("segment") if s.get("entryUid") in live]
+        try:
+            tz = ZoneInfo(self.zone)
+        except (KeyError, ValueError):
+            tz = ZoneInfo("UTC")
+        return timegrid.busy_minutes(segs, day, tz, self.clock(), skip)
 
     def open_segment(self, entry_uid):
         open_ = [s for s in self.segments(entry_uid) if s.get("endUtcMs") is None]

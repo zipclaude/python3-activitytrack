@@ -9,7 +9,7 @@ the dates and times typed by the user.
 import re
 from datetime import date, datetime, time, timedelta
 
-from . import texts
+from . import formats, texts
 from .i18n import _
 from .policy import stored
 from .session import Session
@@ -140,26 +140,37 @@ def parse_day(text, today=None):
         year = int(m.group(3)) if m.group(3) else today.year
         if year < 100:
             year += 2000
+        d, mo = formats.day_order(int(m.group(1)), int(m.group(2)))
         try:
-            return date(year, int(m.group(2)), int(m.group(1)))
+            return date(year, mo, d)
         except ValueError:
             pass
     raise InputError(_("Data non valida: «%s» (per esempio 2026-11-03, 3/11, oggi, domani).") % text)
 
 
 def parse_minute(text):
-    """"9:30", "09.30", "930" → minutes after midnight."""
-    m = re.fullmatch(r"(\d{1,2})(?:[:.]?(\d{2}))?", (text or "").strip())
+    """"9:30", "09.30", "930", "9:30 pm" → minutes after midnight."""
+    t = (text or "").strip().lower()
+    half = re.search(r"\s*([ap])\.?m?\.?$", t)
+    if half:
+        t = t[:half.start()]
+    m = re.fullmatch(r"(\d{1,2})(?:[:.]?(\d{2}))?", t)
     if m:
         h, mi = int(m.group(1)), int(m.group(2) or 0)
+        if half and 1 <= h <= 12:
+            h = h % 12 + (12 if half.group(1) == "p" else 0)
+        elif half:
+            h = 24  # 13 pm: not a time
         if h < 24 and mi < 60:
             return h * 60 + mi
     raise InputError(_("Orario non valido: «%s» (per esempio 9:30).") % text)
 
 
 def parse_when(text, today=None):
-    """"9:30" (today) or "3/11 9:30" or "2026-11-03 9:30" → epoch ms."""
+    """"9:30" (today) or "3/11 9:30" or "2026-11-03 9:30 pm" → epoch ms."""
     parts = (text or "").split()
+    if len(parts) > 1 and parts[-1].lower().strip(".") in ("am", "pm", "a", "p"):
+        parts[-2:] = [" ".join(parts[-2:])]
     day = parse_day(parts[0], today) if len(parts) == 2 else (today or date.today())
     minute = parse_minute(parts[-1])
     moment = datetime.combine(day, time(minute // 60, minute % 60)).astimezone()

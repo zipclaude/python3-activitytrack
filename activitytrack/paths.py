@@ -28,5 +28,8 @@ def data_dir():
         try:
             old.rename(new)
         except OSError:
+            # another interface, started at the same time, moved it first
+            if new.is_dir():
+                return new
             return old
     return new

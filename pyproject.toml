@@ -10,7 +10,7 @@ readme = "README.md"
 # the table form: Ubuntu 24.04's setuptools (68) does not read an SPDX string
 license = { text = "GPL-3.0-or-later" }
 requires-python = ">=3.11"
-dependencies = ["cryptography>=38", "keyring>=23", "tzdata; sys_platform == 'win32'"]
+dependencies = ["cryptography>=41", "keyring>=23", "tzdata; sys_platform == 'win32'"]
 
 [project.urls]
 Homepage = "https://github.com/zipclaude/python3-activitytrack"

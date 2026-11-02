@@ -86,8 +86,12 @@ class Store:
         return default if row is None else json.loads(row[0])
 
     def set_state(self, key, value):
+        text = json.dumps(value)
         with self.transaction() as db:
-            db.execute("INSERT OR REPLACE INTO state (key, value) VALUES (?, ?)", (key, json.dumps(value)))
+            row = db.execute("SELECT value FROM state WHERE key = ?", (key,)).fetchone()
+            # the same value is not written again: a write tells the other interfaces the data changed
+            if row is None or row[0] != text:
+                db.execute("INSERT OR REPLACE INTO state (key, value) VALUES (?, ?)", (key, text))
 
     @property
     def cursor(self):
@@ -157,6 +161,9 @@ class Store:
 
     def pending(self, limit):
         return self.db.execute("SELECT * FROM pending ORDER BY seq LIMIT ?", (limit,)).fetchall()
+
+    def pending_count(self):
+        return self.db.execute("SELECT COUNT(*) FROM pending").fetchone()[0]
 
     def has_pending(self):
         return self.db.execute("SELECT 1 FROM pending LIMIT 1").fetchone() is not None

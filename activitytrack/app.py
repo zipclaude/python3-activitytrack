@@ -107,7 +107,7 @@ class App:
     def sync_info(self, state="idle", detail=""):
         return {"state": state, "text": texts.sync_state(self.session, state, detail),
                 "attention": texts.sync_needs_attention(self.session, state),
-                "pending": len(self.store.pending(100_000)), "last_sync": _iso(self.store.get_state("last_sync"))}
+                "pending": self.store.pending_count(), "last_sync": _iso(self.store.get_state("last_sync"))}
 
 
 def one_line(text):

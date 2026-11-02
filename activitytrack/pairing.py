@@ -18,9 +18,11 @@ from dataclasses import dataclass
 from urllib.parse import parse_qs, urlsplit
 
 from . import client
-from .net import Http, NetworkError, PinMismatch
+from .net import Http, NetworkError, PinMismatch, local_host
 
 NOT_A_LINK, VERSION, NOT_HTTPS, BAD_PIN = "not_a_link", "version", "not_https", "bad_pin"
+# http:// with --dev, to a server that is not local
+NOT_LOCAL = "not_local"
 INVALID_CODE, USER_DISABLED, NETWORK, CERTIFICATE = "invalid_code", "user_disabled", "network", "certificate"
 SERVER, APP_TOO_OLD, SERVER_TOO_OLD = "server", "app_too_old", "server_too_old"
 
@@ -39,7 +41,7 @@ class PairLink:
 
     @classmethod
     def parse(cls, text, allow_http=False):
-        """[allow_http]: development only, for a local server."""
+        """[allow_http]: development only, for a local server (net.local_host)."""
         uri = urlsplit(text.strip())
         if uri.scheme != "activitytrack" or uri.netloc != "pair":
             raise PairError(NOT_A_LINK)
@@ -53,6 +55,8 @@ class PairLink:
         s = urlsplit(server)
         if not s.hostname or not (s.scheme == "https" or (allow_http and s.scheme == "http")):
             raise PairError(NOT_HTTPS)
+        if s.scheme == "http" and not local_host(s.hostname):
+            raise PairError(NOT_LOCAL)
         pin = q.get("f", "").strip() or None
         if pin is not None:
             try:

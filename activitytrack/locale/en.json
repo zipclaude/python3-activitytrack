@@ -91,6 +91,7 @@
  "dom": "Sun",
  "gg/mm/aaaa": "dd/mm/yyyy",
  "gio": "Thu",
+ "http:// è permesso solo per un server locale (localhost o una rete privata).": "http:// is allowed only for a local server (localhost or a private network).",
  "lun": "Mon",
  "mar": "Tue",
  "mer": "Wed",

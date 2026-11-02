@@ -15,7 +15,7 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import NameOID
 
 from activitytrack import __version__, wire
-from activitytrack.net import Http, NetworkError, PinMismatch
+from activitytrack.net import Http, NetworkError, PinMismatch, key_pin, local_host
 
 
 def self_signed(folder):
@@ -100,3 +100,26 @@ class PinTest(unittest.TestCase):
     def test_http_only_when_allowed(self):
         with self.assertRaises(NetworkError):
             Http("http://127.0.0.1:1")
+
+    def test_with_dev_http_only_to_a_local_server(self):
+        for server in ("http://127.0.0.1:8000", "http://localhost", "http://[::1]:8000", "http://10.1.2.3",
+                       "http://172.20.0.1", "http://192.168.1.10/at", "http://[fd00::1]", "http://169.254.1.1"):
+            Http(server, allow_http=True)
+        for server in ("http://8.8.8.8", "http://at.example.com", "http://172.32.0.1", "http://[2001:db8::1]",
+                       "http://localhost.example.com"):
+            with self.assertRaises(NetworkError):
+                Http(server, allow_http=True)
+        # https is never restricted
+        Http("https://at.example.com", allow_http=True)
+
+    def test_local_hosts(self):
+        self.assertTrue(local_host("LOCALHOST."))
+        self.assertTrue(local_host("fe80::1%eth0"))
+        self.assertTrue(local_host("::ffff:192.168.0.1"))
+        self.assertFalse(local_host("printer.local"))
+        self.assertFalse(local_host(None))
+
+    def test_a_certificate_that_cannot_be_read_is_a_certificate_error(self):
+        with self.assertRaises(NetworkError) as e:
+            key_pin(b"not a certificate")
+        self.assertTrue(e.exception.certificate)

@@ -25,6 +25,20 @@ class PathsTest(unittest.TestCase):
             self.assertEqual(paths.data_dir(), Path(d, "activitytrack"))
             self.assertTrue(old.exists())
 
+    def test_two_interfaces_move_the_old_folder_at_once(self):
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {"XDG_DATA_HOME": d}):
+            old, new = Path(d, "activitytrack-desktop"), Path(d, "activitytrack")
+            old.mkdir()
+            rename = Path.rename
+
+            def first_the_other(self, target):
+                # the other interface moves it between the check and this rename
+                rename(self, target)
+                return rename(self, target)
+            with mock.patch.object(Path, "rename", first_the_other):
+                self.assertEqual(paths.data_dir(), new)
+            self.assertTrue(new.is_dir())
+
 
 class FakeKeyring:
     def __init__(self):
@@ -48,3 +62,20 @@ class VaultNameTest(unittest.TestCase):
             v.keyring.set_password(OLD_SERVICE, "dev", "tok")
             self.assertEqual(v.get("dev"), "tok")
             self.assertEqual(v.keyring.data, {(SERVICE, "dev"): "tok"})
+
+    def test_a_failing_secret_store_is_tried_again(self):
+        with tempfile.TemporaryDirectory() as d:
+            v = Vault(d, use_keyring=False)
+            v.keyring = FakeKeyring()
+            set_password = v.keyring.set_password
+            v.keyring.set_password = mock.Mock(side_effect=RuntimeError("locked"))
+            with self.assertLogs("activitytrack.vault", "WARNING"):
+                v.put("dev", "tok")
+            # kept in the file, and said so
+            self.assertFalse(v.secure)
+            self.assertEqual(v.get("dev"), "tok")
+            v.keyring.set_password = set_password
+            v.put("dev", "tok2")
+            self.assertTrue(v.secure)
+            self.assertEqual(v.keyring.data, {(SERVICE, "dev"): "tok2"})
+            self.assertEqual(v.get("dev"), "tok2")

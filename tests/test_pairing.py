@@ -2,7 +2,7 @@
 import base64
 import unittest
 
-from activitytrack.pairing import BAD_PIN, NOT_A_LINK, NOT_HTTPS, VERSION, PairError, PairLink
+from activitytrack.pairing import BAD_PIN, NOT_A_LINK, NOT_HTTPS, NOT_LOCAL, VERSION, PairError, PairLink
 
 PIN = base64.b64encode(bytes(32)).decode()
 
@@ -31,3 +31,8 @@ class PairLinkTest(unittest.TestCase):
     def test_http_only_for_development(self):
         link = PairLink.parse("activitytrack://pair?v=1&u=http%3A%2F%2F127.0.0.1%3A8000&c=x", allow_http=True)
         self.assertEqual(link.server, "http://127.0.0.1:8000")
+        link = PairLink.parse("activitytrack://pair?v=1&u=http%3A%2F%2F192.168.1.5%2Fat&c=x", allow_http=True)
+        self.assertEqual(link.server, "http://192.168.1.5/at")
+        # not to a server out there: the token would travel in the clear
+        self.assertRefused("activitytrack://pair?v=1&u=http%3A%2F%2Fat.example.com&c=x", NOT_LOCAL, allow_http=True)
+        self.assertRefused("activitytrack://pair?v=1&u=http%3A%2F%2F8.8.8.8&c=x", NOT_LOCAL, allow_http=True)

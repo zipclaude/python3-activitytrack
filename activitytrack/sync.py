@@ -173,10 +173,16 @@ class Runner:
         self._policy_at = 0
 
     def run(self, full=True):
-        http = self.session.http()
+        store = self.session.store
+        try:
+            http = self.session.http()
+        except NetworkError as e:
+            # the account's address is refused (http:// without --dev): no network to wait for
+            return "failed", str(e)
+        except Exception as e:
+            return "failed", f"{type(e).__name__}: {e}"
         if http is None:
             return "unpaired", ""
-        store = self.session.store
         engine = SyncEngine(store, http)
         try:
             if not full and not store.has_pending():

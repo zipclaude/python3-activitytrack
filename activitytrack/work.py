@@ -27,6 +27,11 @@ RUNNING = (ACTIVE, SUSPENDED)
 TRACKED, MANUAL = "TRACKED", "MANUAL"
 
 
+def _make_way(entry):
+    """The command that leaves room for another activity: a pause cannot be suspended, it stops."""
+    return SUSPEND if entry.get("mode") != PAUSE else STOP
+
+
 class WorkError(Exception):
     """A command the rules refuse; [code] names why (the interface words it)."""
 
@@ -280,7 +285,7 @@ class Work:
         for e in self.running():
             cmd = req.others.get(e["uid"])
             if cmd is None and not p.feature("concurrentEntries") and e["status"] == ACTIVE:
-                cmd = SUSPEND if e.get("mode") != PAUSE else STOP
+                cmd = _make_way(e)
             if cmd is not None:
                 self.command(e["uid"], cmd, at=min(start, now) if req.start_ms else None)
         uid = new_uid()
@@ -335,6 +340,12 @@ class Work:
                 and e.get("clientUid") and (e.get("activity") or "").strip() and not e.get("todoUid")):
             status = CLOSED
         self._touch(uid, {"status": status, "mode": mode}, at=when)
+        # without concurrent activities what goes back to work or travel suspends
+        # the others, as a new start does (app issue #132)
+        if status == ACTIVE and mode != PAUSE and not self.policy.feature("concurrentEntries"):
+            for other in self.running():
+                if other["uid"] != uid and other["status"] == ACTIVE:
+                    self.command(other["uid"], _make_way(other), at=when)
         return status
 
     @atomic

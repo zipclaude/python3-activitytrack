@@ -49,6 +49,8 @@ class Store:
         # the file of an open one: the data folder could not be removed)
         self._all = []
         self._lock = threading.Lock()
+        # one more at every close(): a thread whose connection was closed opens a new one
+        self._generation = 0
         try:
             # executescript commits by itself: not inside transaction()
             self.db.executescript(SCHEMA)
@@ -59,7 +61,7 @@ class Store:
     @property
     def db(self):
         db = getattr(self._local, "db", None)
-        if db is None:
+        if db is None or getattr(self._local, "generation", None) != self._generation:
             # each connection stays with its thread; closing it from another one is close()'s only use
             db = sqlite3.connect(self.path, isolation_level=None, timeout=30, check_same_thread=False)
             try:
@@ -71,7 +73,7 @@ class Store:
                 raise
             with self._lock:
                 self._all.append(db)
-            self._local.db = db
+            self._local.db, self._local.generation = db, self._generation
         return db
 
     @contextmanager
@@ -89,9 +91,14 @@ class Store:
         db.execute("COMMIT")
 
     def close(self):
-        """Every thread's connection: the store is not used afterwards."""
+        """
+        Every thread's connection (Windows keeps the file of an open one); a
+        thread that reads afterwards opens a new one: the interfaces' sync
+        workers close after each run while the window goes on reading.
+        """
         with self._lock:
             connections, self._all = self._all, []
+            self._generation += 1
         for db in connections:
             db.close()
         self._local.db = None

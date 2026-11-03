@@ -1,3 +1,12 @@
+python-activitytrack (0.9.4~beta5-1-1) unstable; urgency=medium
+
+  * Fix (beta5 regression, desktop issue #24): close() from a thread other
+    than the one that opened the store closes that thread's connection
+    only; the desktop's and the terminal's sync workers closed the
+    window's connection after each run.
+
+ -- ActivityTrack <flavio-claude@zipman.it>  Tue, 03 Nov 2026 13:30:50 +0100
+
 python-activitytrack (0.9.4~beta5-1) unstable; urgency=medium
 
   * Security review fixes: the sync never dies on a refused address; no

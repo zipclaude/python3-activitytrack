@@ -20,6 +20,20 @@ class StoreTest(unittest.TestCase):
             with self.assertRaises(sqlite3.ProgrammingError):
                 other[0].execute("SELECT 1")
 
+    def test_a_workers_close_leaves_the_other_threads_working(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Store(Path(tmp) / "d.sqlite3")
+            store.set_state("x", 1)
+            mine = store.db
+            # the desktop's and the terminal's sync worker, closing after its run (desktop issue #24)
+            t = threading.Thread(target=lambda: (store.get_state("x"), store.close()))
+            t.start()
+            t.join()
+            self.assertIs(store.db, mine)
+            store.set_state("x", 2)
+            self.assertEqual(store.get_state("x"), 2)
+            store.close()
+
     def test_a_file_that_is_not_a_database_leaves_nothing_open(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "d.sqlite3"

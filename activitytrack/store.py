@@ -49,6 +49,8 @@ class Store:
         # the file of an open one: the data folder could not be removed)
         self._all = []
         self._lock = threading.Lock()
+        # close() from this thread ends the store; from another, only that thread's connection
+        self._owner = threading.get_ident()
         try:
             # executescript commits by itself: not inside transaction()
             self.db.executescript(SCHEMA)
@@ -89,11 +91,20 @@ class Store:
         db.execute("COMMIT")
 
     def close(self):
-        """Every thread's connection: the store is not used afterwards."""
+        """
+        From the thread that opened the store: every thread's connection, the
+        store is not used afterwards. From another thread (a sync worker after
+        its run): that thread's connection only, the others go on.
+        """
+        db = getattr(self._local, "db", None)
         with self._lock:
-            connections, self._all = self._all, []
-        for db in connections:
-            db.close()
+            if threading.get_ident() == self._owner:
+                connections, self._all = self._all, []
+            else:
+                connections = [db] if db is not None else []
+                self._all = [c for c in self._all if c is not db]
+        for c in connections:
+            c.close()
         self._local.db = None
 
     # state

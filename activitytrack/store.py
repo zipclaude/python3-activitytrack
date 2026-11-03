@@ -49,8 +49,8 @@ class Store:
         # the file of an open one: the data folder could not be removed)
         self._all = []
         self._lock = threading.Lock()
-        # one more at every close(): a thread whose connection was closed opens a new one
-        self._generation = 0
+        # close() from this thread ends the store; from another, only that thread's connection
+        self._owner = threading.get_ident()
         try:
             # executescript commits by itself: not inside transaction()
             self.db.executescript(SCHEMA)
@@ -61,7 +61,7 @@ class Store:
     @property
     def db(self):
         db = getattr(self._local, "db", None)
-        if db is None or getattr(self._local, "generation", None) != self._generation:
+        if db is None:
             # each connection stays with its thread; closing it from another one is close()'s only use
             db = sqlite3.connect(self.path, isolation_level=None, timeout=30, check_same_thread=False)
             try:
@@ -73,7 +73,7 @@ class Store:
                 raise
             with self._lock:
                 self._all.append(db)
-            self._local.db, self._local.generation = db, self._generation
+            self._local.db = db
         return db
 
     @contextmanager
@@ -92,15 +92,19 @@ class Store:
 
     def close(self):
         """
-        Every thread's connection (Windows keeps the file of an open one); a
-        thread that reads afterwards opens a new one: the interfaces' sync
-        workers close after each run while the window goes on reading.
+        From the thread that opened the store: every thread's connection, the
+        store is not used afterwards. From another thread (a sync worker after
+        its run): that thread's connection only, the others go on.
         """
+        db = getattr(self._local, "db", None)
         with self._lock:
-            connections, self._all = self._all, []
-            self._generation += 1
-        for db in connections:
-            db.close()
+            if threading.get_ident() == self._owner:
+                connections, self._all = self._all, []
+            else:
+                connections = [db] if db is not None else []
+                self._all = [c for c in self._all if c is not db]
+        for c in connections:
+            c.close()
         self._local.db = None
 
     # state

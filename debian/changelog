@@ -1,3 +1,11 @@
+python-activitytrack (0.9.5-1) unstable; urgency=medium
+
+  * Release 0.9.5, in step with ActivityTrack 0.9.5 (the app, ActivityTrack
+    Web, the desktop and the command-line and text interfaces). The library
+    itself does not change since 0.9.4-beta5-1.
+
+ -- ActivityTrack <flavio-claude@zipman.it>  Thu, 05 Nov 2026 20:58:45 +0000
+
 python-activitytrack (0.9.4~beta5-1-1) unstable; urgency=medium
 
   * Fix (beta5 regression, desktop issue #24): close() from a thread other

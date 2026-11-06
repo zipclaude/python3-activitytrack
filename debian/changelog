@@ -1,3 +1,13 @@
+python-activitytrack (0.9.6-1) unstable; urgency=medium
+
+  * Release 0.9.6, in step with ActivityTrack 0.9.6 (the app, ActivityTrack
+    Web, the desktop and the command-line and text interfaces). The library
+    itself does not change since 0.9.5: it still speaks wire schema 1, which
+    the 0.9.6 server translates (planned absences appear as to-dos titled
+    "Assenza").
+
+ -- ActivityTrack <flavio-claude@zipman.it>  Fri, 06 Nov 2026 02:40:00 +0000
+
 python-activitytrack (0.9.5-1) unstable; urgency=medium
 
   * Release 0.9.5, in step with ActivityTrack 0.9.5 (the app, ActivityTrack

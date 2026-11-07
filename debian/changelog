@@ -1,3 +1,13 @@
+python-activitytrack (0.9.8-1) unstable; urgency=medium
+
+  * Release 0.9.8, in step with ActivityTrack 0.9.8: the first release from
+    GitLab. The update check reads the GitLab releases (a version with a
+    suffix is a beta) and gets its first tests; the project's addresses move
+    to gitlab.com/infraconsulting. Wire schema unchanged (1, translated by
+    the server).
+
+ -- ActivityTrack <flavio-claude@zipman.it>  Sat, 07 Nov 2026 16:30:00 +0000
+
 python-activitytrack (0.9.6-1) unstable; urgency=medium
 
   * Release 0.9.6, in step with ActivityTrack 0.9.6 (the app, ActivityTrack

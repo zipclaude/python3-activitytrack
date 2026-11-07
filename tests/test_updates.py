@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
+import contextlib
 import functools
 import hashlib
 import tempfile
@@ -14,7 +15,7 @@ from activitytrack.policy import Policy
 from activitytrack.session import Session
 from activitytrack.sync import Runner
 
-from .test_manifest import make_key, payload
+from .test_manifest import _Body, make_key, payload
 
 SHA = hashlib.sha256(b"package").hexdigest()
 FILE = "/api/v1/update/files/" + SHA
@@ -28,16 +29,21 @@ def releases(component="desktop-tar", url=FILE, issued="2026-11-07T10:00:00Z"):
 
 
 class Down:
-    """The paired server's http: the files it keeps."""
-    def __init__(self, body=b"package", status=200):
-        self.body, self.status, self.asked, self.limits = body, status, [], []
+    """The paired server's http: the files it keeps, streamed in [chunk] bytes."""
+    def __init__(self, body=b"package", status=200, chunk=1 << 20):
+        self.body, self.status, self.chunk, self.asked, self.reads = body, status, chunk, [], 0
+        self.at = 0
 
-    def exchange(self, method, path, body=None, content_type=None, headers=None, max_bytes=None):
-        self.asked.append((method, path))
-        self.limits.append(max_bytes)
-        if max_bytes is not None and len(self.body) > max_bytes:
-            raise NetworkError(f"answer longer than {max_bytes} bytes")
-        return self.status, self.body
+    @contextlib.contextmanager
+    def stream(self, path, headers=None):
+        self.asked.append(("GET", path))
+        yield self
+
+    def read(self, n=-1):
+        self.reads += 1
+        piece = self.body[self.at:self.at + min(n, self.chunk)]
+        self.at += len(piece)
+        return piece
 
 
 class UpdatesTest(unittest.TestCase):
@@ -204,6 +210,28 @@ class UpdatesTest(unittest.TestCase):
         self.assertFalse(self.u.due(5_000_000 + 3600))
         self.assertTrue(self.u.due(5_000_000 + updates.DAY_S))
 
+    def test_what_the_server_refuses_has_its_own_states(self):
+        from activitytrack import texts, wire
+        self.pair()
+        for answer, state, error in (("revoked", updates.REVOKED, ""),
+                                     ("incompatible:app_too_old", updates.INCOMPATIBLE, wire.APP_TOO_OLD),
+                                     ("incompatible:server_too_old", updates.INCOMPATIBLE, wire.SERVER_TOO_OLD),
+                                     ("no route", updates.ERROR, "no route")):
+            self.refresh = answer
+            s = self.u.check()
+            self.assertEqual((state, error), (s.state, s.error), answer)
+            self.assertIn(state, updates.FAILED)
+            self.assertNotIn("non raggiungibile", texts.update_state(s, "0.9.8") if state != updates.ERROR else "")
+        # each says what the sync says of it
+        self.refresh = "revoked"
+        self.assertIn("revocato", texts.update_state(self.u.check(), "0.9.8"))
+        self.refresh = "incompatible:server_too_old"
+        self.assertIn("va aggiornato il server", texts.update_state(self.u.check(), "0.9.8"))
+        self.refresh = "incompatible:app_too_old"
+        self.assertIn("aggiorna ActivityTrack sul PC", texts.update_state(self.u.check(), "0.9.8"))
+        self.refresh = "no route"
+        self.assertIn("non raggiungibile", texts.update_state(self.u.check(), "0.9.8"))
+
     def test_check_without_a_pairing_does_not_ask(self):
         self.refresh = "must not be asked"
         self.assertEqual(updates.UNPAIRED, self.u.check().state)
@@ -236,18 +264,30 @@ class UpdatesTest(unittest.TestCase):
         self.pair()
         self.relay()
         release = self.u.status().release
-        # the manifest declares 7 bytes ("package")
-        down = Down(body=b"package, and then some")
+        # the manifest declares 7 bytes ("package"): the answer is cut as it is read, not held whole
+        down = Down(body=b"package, and then some", chunk=4)
         with mock.patch.object(self.session, "http", return_value=down):
             with self.assertRaises(manifest.ManifestError) as e:
                 self.u.download(release, Path(self.dir.name) / "out")
-        self.assertIn("longer", str(e.exception))
-        self.assertEqual([7], down.limits)
+        self.assertIn("larger", str(e.exception))
+        self.assertEqual(2, down.reads)
         self.assertEqual([], list((Path(self.dir.name) / "out").iterdir()))
         # shorter than declared: refused too
         with mock.patch.object(self.session, "http", return_value=Down(body=b"pack")):
             with self.assertRaises(manifest.ManifestError):
                 self.u.download(release, Path(self.dir.name) / "out")
+
+    def test_a_network_error_in_the_middle_of_a_file_is_a_manifest_error(self):
+        self.pair()
+        self.relay()
+
+        class Broken(Down):
+            def read(self, n=-1):
+                raise NetworkError("connection reset")
+        with mock.patch.object(self.session, "http", return_value=Broken()):
+            with self.assertRaises(manifest.ManifestError) as e:
+                self.u.download(self.u.status().release, Path(self.dir.name) / "out")
+        self.assertIn("reset", str(e.exception))
 
     def test_a_package_without_a_size_is_held_to_the_cap(self):
         self.pair()
@@ -256,10 +296,35 @@ class UpdatesTest(unittest.TestCase):
             del r["packages"][0]["size"]
         self.session.store.set_state("update.manifest", manifest.sign(p, self.key, self.chain))
         release = self.u.status().release
-        down = Down()
-        with mock.patch.object(self.session, "http", return_value=down):
-            self.u.download(release, Path(self.dir.name) / "out")
-        self.assertEqual([manifest.MAX_DOWNLOAD], down.limits)
+        with mock.patch.object(self.session, "http", return_value=Down(body=b"x" * 5000, chunk=1000)), \
+                mock.patch.object(manifest, "MAX_DOWNLOAD", 3000):
+            with self.assertRaises(manifest.ManifestError):
+                self.u.download(release, Path(self.dir.name) / "out")
+
+    def test_a_package_the_server_has_at_another_address_is_downloaded_from_there(self):
+        """The server not mirroring: the manifest keeps the upstream https address; no token goes there."""
+        self.pair()
+        sha = hashlib.sha256(b"upstream").hexdigest()
+        p = releases(url="https://example.org/d.tar.gz")
+        for r in p["releases"]:
+            r["packages"][0].update(sha256=sha, size=8)
+        self.session.store.set_state("update.manifest", manifest.sign(p, self.key, self.chain))
+        s = self.u.status()
+        self.assertTrue(s.downloadable)
+        seen = []
+
+        class Web:
+            def open(self, request, timeout=None):
+                seen.append((request.full_url, request.get_header("Authorization")))
+                return _Body(b"upstream")
+        server = Down()
+        with mock.patch.object(self.session, "http", return_value=server), \
+                mock.patch("urllib.request.build_opener", return_value=Web()):
+            path = self.u.download(s.release, Path(self.dir.name) / "out")
+        self.assertEqual(b"upstream", path.read_bytes())
+        self.assertEqual([("https://example.org/d.tar.gz", None)], seen)
+        # the server itself was not asked
+        self.assertEqual([], server.asked)
 
     def test_a_manifest_with_odd_times_is_not_a_crash(self):
         self.pair()

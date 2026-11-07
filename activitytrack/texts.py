@@ -176,6 +176,16 @@ def update_state(status, version):
             return _("Il collegamento di associazione non portava la chiave del server per gli aggiornamenti: "
                      "associa di nuovo il PC per riceverli.")
         return _("L'annuncio del server non è firmato con la sua chiave: ignorato.")
+    if s == updates.REVOKED:
+        return _("Il server ha revocato l'associazione di questo PC. I dati restano qui: "
+                 "per sincronizzare di nuovo associalo dalla pagina «Dispositivi» del web.")
+    if s == updates.INCOMPATIBLE:
+        from . import wire
+        if status.error == wire.SERVER_TOO_OLD:
+            return _("Questa versione è più recente del server ActivityTrack Web: va aggiornato il server "
+                     "(avvisa l'amministratore). I dati restano qui e si sincronizzano dopo l'aggiornamento.")
+        return _("Il server ActivityTrack Web non accetta più questa versione: aggiorna ActivityTrack sul PC. "
+                 "I dati restano qui e si sincronizzano dopo l'aggiornamento.")
     if s == updates.ERROR:
         return _("Server non raggiungibile: %s") % status.error
     if s == updates.AVAILABLE:

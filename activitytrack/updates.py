@@ -15,6 +15,7 @@ updates it. The check itself is a setting (and a policy may fix it, as
 `updateCheck` and `updateBetas` do); the channels followed are always prod plus, with the beta switch, beta.
 """
 
+import contextlib
 import re
 import sys
 import time
@@ -23,10 +24,15 @@ from dataclasses import dataclass
 from . import client, manifest
 from .manifest import ManifestError
 from .net import NetworkError
+from .sync import INCOMPATIBLE, REVOKED
 from .versions import compare  # noqa: F401  (the interfaces order versions with it)
 
 # Status.state
 OFF, UNPAIRED, UNTRUSTED, NONE, AVAILABLE, ERROR = "off", "unpaired", "untrusted", "none", "available", "error"
+# REVOKED, INCOMPATIBLE (sync.py): the server refused the question, because it revoked this PC or does not speak
+# this version (Status.error: the code that says which side to update)
+# the states in which nothing can be said of a newer version: a command line exits with an error
+FAILED = (UNPAIRED, UNTRUSTED, ERROR, REVOKED, INCOMPATIBLE)
 DAY_S = 24 * 3600
 
 CHECK, BETAS, ISSUED, MANIFEST, CHECKED = "updates.check", "updates.betas", "update.issued", "update.manifest", \
@@ -179,6 +185,10 @@ class Updates:
         if self.session.account is None:
             return Status(UNPAIRED)
         failed = self.runner.refresh_update()
+        if failed == REVOKED:
+            return Status(REVOKED)
+        if failed.partition(":")[0] == INCOMPATIBLE:
+            return Status(INCOMPATIBLE, error=failed.partition(":")[2])
         if failed:
             return Status(ERROR, error=failed)
         self.store.set_state(CHECKED, now if now is not None else time.time())
@@ -213,25 +223,24 @@ class Updates:
         version = re.sub(r"[^A-Za-z0-9.+~_-]", "_", release.version)
         dest = folder / f"activitytrack-{package.component}-{version}{_extension(package.component)}"
 
-        # the server's answer is held to the size the manifest declares (or to the cap when it declares none)
-        limit = package.size or manifest.MAX_DOWNLOAD
-
-        def opener(url, timeout):
-            return _Reply(self._open(http, url, limit))
-
+        # a file of the server goes through its authorisation and is streamed to the .part file; a package
+        # the server's manifest has at another address (https, the server not mirroring) is fetched there, with
+        # no token: the manifest, signed by the server's pinned key, is what vouches for the address
+        opener = self._server_file(http) if package.url.startswith(PREFIX) else None
         return manifest.download(package, dest, opener=opener)
 
     @staticmethod
-    def _open(http, url, limit):
-        if not url.startswith(PREFIX):
-            raise ManifestError("not a file of the server")
-        try:
-            status, body = http.exchange("GET", url[len(PREFIX):], max_bytes=limit)
-        except NetworkError as e:
-            raise ManifestError(str(e)) from e
-        if status != 200:
-            raise ManifestError(f"HTTP {status}")
-        return body
+    def _server_file(http):
+        @contextlib.contextmanager
+        def opener(url, timeout):
+            try:
+                with http.stream(url[len(PREFIX):]) as r:
+                    if r.status != 200:
+                        raise ManifestError(f"HTTP {r.status}")
+                    yield r
+            except NetworkError as e:
+                raise ManifestError(str(e)) from e
+        return opener
 
 
 def _extension(name):
@@ -241,21 +250,3 @@ def _extension(name):
     if kind == "windows":
         return ".exe" if name.startswith("desktop-") else ".zip"
     return ".deb"
-
-
-class _Reply:
-    """What manifest.download reads: the body, in pieces."""
-
-    def __init__(self, body):
-        self.body, self.at = body, 0
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *exc):
-        return False
-
-    def read(self, n=-1):
-        end = len(self.body) if n < 0 else self.at + n
-        chunk, self.at = self.body[self.at:end], end
-        return chunk

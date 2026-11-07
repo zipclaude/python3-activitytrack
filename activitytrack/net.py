@@ -7,6 +7,7 @@ name; without one, the system's trust store and host name check apply.
 """
 
 import base64
+import contextlib
 import hashlib
 import http.client
 import ipaddress
@@ -111,9 +112,9 @@ class Http:
             ctx = ssl.create_default_context()
         return http.client.HTTPSConnection(self.host, self.port, timeout=CONNECT_TIMEOUT, context=ctx)
 
-    def exchange(self, method, path, body=None, content_type=None, headers=None, max_bytes=None):
-        """One request; the pin is checked before anything is sent. [max_bytes]: an answer longer than it
-        is refused (a file that is expected to have a size)."""
+    @contextlib.contextmanager
+    def _response(self, method, path, body=None, content_type=None, headers=None):
+        """One request, the response while the connection is open; the pin is checked before anything is sent."""
         c = self._connection()
         try:
             c.connect()
@@ -133,19 +134,23 @@ class Http:
                 h["Content-Type"] = content_type or "application/octet-stream"
             h.update(headers or {})
             c.request(method, self.base + path, body=body, headers=h)
-            r = c.getresponse()
-            if max_bytes is None:
-                return r.status, r.read()
-            raw = r.read(max_bytes + 1)
-            if len(raw) > max_bytes:
-                raise NetworkError(f"answer longer than {max_bytes} bytes")
-            return r.status, raw
+            yield c.getresponse()
         except ssl.SSLCertVerificationError as e:
             raise NetworkError(str(e), certificate=True) from e
         except (OSError, http.client.HTTPException) as e:
             raise NetworkError(str(e) or type(e).__name__) from e
         finally:
             c.close()
+
+    def exchange(self, method, path, body=None, content_type=None, headers=None):
+        """One request; the answer whole, as (status, bytes)."""
+        with self._response(method, path, body, content_type, headers) as r:
+            return r.status, r.read()
+
+    def stream(self, path, headers=None):
+        """GET [path] to read in pieces: a context manager giving the response (`status`, `read(n)`); the
+        connection closes with it. For the files the server keeps, which are not held in memory."""
+        return self._response("GET", path, headers={"Accept": "application/octet-stream", **(headers or {})})
 
     def send(self, method, path, body=None):
         """JSON [body] (text) to [path]; the answer as text."""

@@ -85,13 +85,24 @@ class PinTest(unittest.TestCase):
         self.assertEqual(headers[wire.APP_HEADER], __version__)
         self.assertEqual(headers[wire.SCHEMA_HEADER], str(wire.SCHEMA))
 
-    def test_an_answer_longer_than_expected_is_refused(self):
+    def test_a_file_is_read_in_pieces_and_the_connection_closes_after(self):
         http = Http(self.url, self.pin, token="tok")
-        # the answer of the test server is 10 bytes
-        self.assertEqual((200, b'{"rev": 7}'), http.exchange("GET", "sync/head", max_bytes=10))
-        with self.assertRaises(NetworkError) as e:
-            http.exchange("GET", "sync/head", max_bytes=9)
-        self.assertIn("longer", str(e.exception))
+        with http.stream("update/files/abc") as r:
+            self.assertEqual(200, r.status)
+            # the answer of the test server is 10 bytes: read as asked, not whole
+            self.assertEqual(b'{"re', r.read(4))
+            self.assertEqual(b'v": 7}', r.read(100))
+            self.assertEqual(b"", r.read(100))
+        path, headers = Handler.seen[-1]
+        self.assertEqual("/at/api/v1/update/files/abc", path)
+        self.assertEqual(("Bearer tok", "application/octet-stream"), (headers["Authorization"], headers["Accept"]))
+
+    def test_a_pin_that_does_not_fit_is_refused_before_a_file_is_asked(self):
+        count = len(Handler.seen)
+        with self.assertRaises(PinMismatch):
+            with Http(self.url, base64.b64encode(bytes(32)).decode(), token="tok").stream("update/files/abc"):
+                pass
+        self.assertEqual(len(Handler.seen), count)
 
     def test_another_key_is_refused_before_sending(self):
         count = len(Handler.seen)

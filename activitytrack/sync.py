@@ -156,6 +156,8 @@ class SyncEngine:
 
 
 POLICY_EVERY_S = 300
+# what refresh_update() answers besides "" and an error text
+UNPAIRED, REVOKED, INCOMPATIBLE = "unpaired", "revoked", "incompatible"
 # a manifest is a few kilobytes: more is not one
 MAX_UPDATE = 1024 * 1024
 
@@ -186,6 +188,7 @@ class Runner:
         if http is None:
             return "unpaired", ""
         engine = SyncEngine(store, http)
+        head = None
         try:
             if not full and not store.has_pending():
                 head = engine.head()
@@ -194,8 +197,10 @@ class Runner:
                     store.set_state("incompatible", None)
                     changed = self.policy(http, force=False)
                     return ("ok" if changed else "idle"), ""
-            # one more call per sync: the server tells here of a new version (docs/SYNC.md §12.4)
-            self.update(engine.head())
+            # the server tells here of a new version (docs/SYNC.md §12.4): the head is asked once a run
+            if head is None:
+                head = engine.head()
+                self.update(head)
             result = engine.sync()
             store.set_state("incompatible", None)
             self.policy(http, force=True)
@@ -224,18 +229,20 @@ class Runner:
         self.session.store.set_state("update.manifest", text)
 
     def refresh_update(self):
-        """Asks the server for its manifest now ("Check now"); an error text, or "" when asked."""
+        """Asks the server for its manifest now ("Check now"): "" when asked; UNPAIRED, REVOKED or
+        INCOMPATIBLE + ":" + the code of the server (wire.APP_TOO_OLD, wire.SERVER_TOO_OLD) when the server
+        refuses; else the text of what went wrong (the network)."""
         try:
             http = self.session.http()
             if http is None:
-                return "unpaired"
+                return UNPAIRED
             self.update(SyncEngine(self.session.store, http).head())
         except SyncRevoked:
             self.session.store.set_state("revoked", True)
-            return "revoked"
+            return REVOKED
         except SyncIncompatible as e:
             self.session.store.set_state("incompatible", e.code)
-            return "incompatible"
+            return f"{INCOMPATIBLE}:{e.code}"
         except (SyncFailed, NetworkError) as e:
             return str(e) or "offline"
         return ""

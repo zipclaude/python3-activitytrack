@@ -186,6 +186,23 @@ class RunnerTest(unittest.TestCase):
         self.assertEqual("", r.refresh_update())
         self.server.status = 401
         self.assertEqual("revoked", r.refresh_update())
+        self.server.status = 426
+        self.assertEqual("incompatible:app_too_old", r.refresh_update())
+        self.assertEqual("app_too_old", self.store.get_state("incompatible"))
+
+    def test_the_head_is_asked_once_a_run(self):
+        from activitytrack.sync import Runner
+        r = Runner(_Session(self.store, self.server))
+        r.run()
+        self.server.put("todo", "t1", {"title": "x"})
+        before = len(self.server.requests)
+        # nothing pending, the revision moved: the head that tells so is the one that tells of the update
+        self.assertEqual(("ok", ""), r.run(full=False))
+        heads = [m for m in self.server.requests[before:] if m[1] == "sync/head"]
+        self.assertEqual(1, len(heads))
+        before = len(self.server.requests)
+        r.run(full=True)
+        self.assertEqual(1, len([m for m in self.server.requests[before:] if m[1] == "sync/head"]))
 
     def test_the_states(self):
         from activitytrack.net import NetworkError

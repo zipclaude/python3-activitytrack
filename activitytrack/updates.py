@@ -155,6 +155,8 @@ class Updates:
 
     def check(self, now=None, channels=None):
         """Asks the server now; the status after it (an unreachable server is an ERROR)."""
+        if self.session.account is None:
+            return Status(UNPAIRED)
         failed = self.runner.refresh_update()
         if failed:
             return Status(ERROR, error=failed)

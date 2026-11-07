@@ -168,6 +168,10 @@ class UpdatesTest(unittest.TestCase):
         self.assertFalse(self.u.due(5_000_000 + 3600))
         self.assertTrue(self.u.due(5_000_000 + updates.DAY_S))
 
+    def test_check_without_a_pairing_does_not_ask(self):
+        self.refresh = "must not be asked"
+        self.assertEqual(updates.UNPAIRED, self.u.check().state)
+
     def test_channels_of_the_manifest(self):
         self.pair()
         self.assertEqual(["prod"], self.u.known_channels())

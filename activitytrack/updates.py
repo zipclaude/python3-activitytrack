@@ -1,19 +1,21 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """
-Newer releases on GitHub (server docs/SYNC.md §12.4, app
+Newer releases on GitLab (server docs/SYNC.md §12.4, app
 domain/update/UpdateCheck.kt): the public releases of this repository,
-a stable one or, for who subscribed to the betas, a pre-release too.
-Drafts never count. Once a day; the policy may fix both settings
-(updateCheck, updateBetas).
+a stable one or, for who subscribed to the betas, a beta too. GitLab has
+no pre-releases: a version with a suffix (1.1.0-beta1) is a beta. Releases
+dated in the future do not count. Once a day; the policy may fix both
+settings (updateCheck, updateBetas).
 """
 
 import json
 import ssl
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 
 # the interfaces' repositories: each one checks its own releases
-REPOSITORY = "zipclaude/activitytrack-desktop"
+REPOSITORY = "infraconsulting/activitytrack-desktop"
 DAY_S = 24 * 3600
 
 
@@ -70,23 +72,25 @@ def newer(releases_json, current, betas):
         return None
     best = None
     for o in data if isinstance(data, list) else ():
-        if not isinstance(o, dict) or o.get("draft") or not o.get("tag_name"):
+        if not isinstance(o, dict) or o.get("upcoming_release") or not o.get("tag_name"):
             continue
-        beta = bool(o.get("prerelease"))
+        version = o["tag_name"].removeprefix("v")
+        beta = "-" in version
         if beta and not betas:
             continue
-        r = Release(o["tag_name"].removeprefix("v"), o.get("html_url") or "", beta)
+        links = o.get("_links")
+        r = Release(version, (links.get("self") if isinstance(links, dict) else None) or "", beta)
         if compare(r.version, current) > 0 and (best is None or compare(r.version, best.version) > 0):
             best = r
     return best
 
 
 def fetch(repository=REPOSITORY, timeout=20):
-    """The releases' JSON of [repository] from GitHub (no account needed)."""
+    """The releases' JSON of [repository] from GitLab (no account needed)."""
     from . import client
     me = client()
-    url = f"https://api.github.com/repos/{repository}/releases?per_page=20"
-    req = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json",
+    url = f"https://gitlab.com/api/v4/projects/{urllib.parse.quote(repository, safe='')}/releases?per_page=20"
+    req = urllib.request.Request(url, headers={"Accept": "application/json",
                                                "User-Agent": f"{me['name']}/{me['version']}"})
     with urllib.request.urlopen(req, timeout=timeout, context=ssl.create_default_context()) as r:
         return r.read().decode("utf-8", "replace")

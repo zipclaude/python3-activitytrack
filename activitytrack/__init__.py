@@ -14,7 +14,7 @@ _client = {"name": "ActivityTrack", "version": __version__}
 
 
 def set_client(name, version):
-    """The interface's name and version, as the server and GitHub see them."""
+    """The interface's name and version, as the server and GitLab see them."""
     _client.update(name=name, version=version)
 
 

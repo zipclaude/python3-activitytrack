@@ -111,8 +111,9 @@ class Http:
             ctx = ssl.create_default_context()
         return http.client.HTTPSConnection(self.host, self.port, timeout=CONNECT_TIMEOUT, context=ctx)
 
-    def exchange(self, method, path, body=None, content_type=None, headers=None):
-        """One request; the pin is checked before anything is sent."""
+    def exchange(self, method, path, body=None, content_type=None, headers=None, max_bytes=None):
+        """One request; the pin is checked before anything is sent. [max_bytes]: an answer longer than it
+        is refused (a file that is expected to have a size)."""
         c = self._connection()
         try:
             c.connect()
@@ -133,7 +134,12 @@ class Http:
             h.update(headers or {})
             c.request(method, self.base + path, body=body, headers=h)
             r = c.getresponse()
-            return r.status, r.read()
+            if max_bytes is None:
+                return r.status, r.read()
+            raw = r.read(max_bytes + 1)
+            if len(raw) > max_bytes:
+                raise NetworkError(f"answer longer than {max_bytes} bytes")
+            return r.status, raw
         except ssl.SSLCertVerificationError as e:
             raise NetworkError(str(e), certificate=True) from e
         except (OSError, http.client.HTTPException) as e:

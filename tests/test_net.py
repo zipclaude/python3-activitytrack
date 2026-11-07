@@ -85,6 +85,14 @@ class PinTest(unittest.TestCase):
         self.assertEqual(headers[wire.APP_HEADER], __version__)
         self.assertEqual(headers[wire.SCHEMA_HEADER], str(wire.SCHEMA))
 
+    def test_an_answer_longer_than_expected_is_refused(self):
+        http = Http(self.url, self.pin, token="tok")
+        # the answer of the test server is 10 bytes
+        self.assertEqual((200, b'{"rev": 7}'), http.exchange("GET", "sync/head", max_bytes=10))
+        with self.assertRaises(NetworkError) as e:
+            http.exchange("GET", "sync/head", max_bytes=9)
+        self.assertIn("longer", str(e.exception))
+
     def test_another_key_is_refused_before_sending(self):
         count = len(Handler.seen)
         other = base64.b64encode(bytes(32)).decode()

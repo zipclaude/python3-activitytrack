@@ -6,6 +6,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
@@ -46,6 +47,21 @@ def resign(text, edit):
     edit(body)
     doc["payload"] = base64.urlsafe_b64encode(json.dumps(body).encode()).rstrip(b"=").decode()
     return json.dumps(doc)
+
+
+class _Body:
+    def __init__(self, data):
+        self.data = data
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def read(self, n=-1):
+        data, self.data = self.data, b""
+        return data
 
 
 class ManifestTest(unittest.TestCase):
@@ -112,6 +128,37 @@ class ManifestTest(unittest.TestCase):
             with self.assertRaises(manifest.ManifestError, msg=text):
                 manifest.verify(text, ["ab" * 32])
 
+    def test_hostile_text_is_a_manifest_error_not_another_exception(self):
+        key, chain, fp = make_key("ec")
+        good = json.loads(manifest.sign(payload(), key, chain))
+        # a trusted certificate copied into the header, with a payload that is not ASCII (it cannot be signed)
+        for text in (json.dumps(dict(good, payload="é" + good["payload"])),
+                     json.dumps(dict(good, signatures=[dict(good["signatures"][0], protected="é")])),
+                     "[" * 100_000, '{"payload": "' + "a" * 10 + '", "signatures": ' + "[" * 100_000 + "]"):
+            with self.assertRaises(manifest.ManifestError):
+                manifest.verify(text, [fp])
+        self.assertEqual([], manifest.signer_fingerprints("[" * 100_000))
+
+    def test_times_without_an_offset_are_utc(self):
+        p = payload(issued="2026-11-07")
+        self.assertEqual("0.9.9", manifest.newer(p, "0.9.0", last_issued="2026-11-06T10:00:00Z").version)
+        self.assertEqual("0.9.9", manifest.newer(payload(), "0.9.0", last_issued="2026-11-07T09:00:00").version)
+        self.assertEqual("0.9.9", manifest.newer(p, "0.9.0", last_issued="2026-11-07T00:00:00+00:00").version)
+        # the older one is still refused, whichever way each is written
+        with self.assertRaises(manifest.ManifestError):
+            manifest.newer(p, "0.9.0", last_issued="2026-11-07T10:00:00Z")
+        with self.assertRaises(manifest.ManifestError):
+            manifest.newer(payload(), "0.9.0", last_issued="2026-11-08")
+        self.assertEqual("0.9.9", manifest.newer(payload(), "0.9.0", last_issued="not a time").version)
+
+    def test_sizes_that_are_not_sizes_leave_the_package_out(self):
+        for size in (-1, True, "3", 1.5, [3]):
+            p = payload()
+            p["releases"][0]["packages"][0]["size"] = size
+            self.assertNotIn("0.9.9", [r.version for r in manifest.releases(p)], size)
+        for releases in (5, "x", {"a": 1}, None):
+            self.assertEqual([], manifest.releases({"releases": releases}))
+
     def test_channels_and_current_version(self):
         p = payload()
         self.assertEqual("0.9.9", manifest.newer(p, "0.9.8").version)
@@ -174,6 +221,50 @@ class ManifestTest(unittest.TestCase):
             with self.assertRaises(manifest.ManifestError):
                 manifest.download(good, dest, opener=lambda req, timeout: Reply(b"abd"))
             self.assertEqual([], list(Path(d).iterdir()))
+
+    def test_download_is_bounded_by_the_declared_size(self):
+        class Endless:
+            reads = 0
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def read(self, n=-1):
+                Endless.reads += 1
+                return b"x" * 1024
+        with tempfile.TemporaryDirectory() as d:
+            dest = Path(d) / "d.deb"
+            sha = hashlib.sha256(b"x" * 2048).hexdigest()
+            # declared 2048: the stream is cut after it, the file dropped
+            with self.assertRaises(manifest.ManifestError) as e:
+                manifest.download(manifest.Package("a", "https://x/a", sha, 2048), dest,
+                                  opener=lambda url, timeout: Endless())
+            self.assertIn("larger", str(e.exception))
+            self.assertEqual(3, Endless.reads)
+            self.assertEqual([], list(Path(d).iterdir()))
+            # shorter than declared: refused, even if the sha256 were the one of what came
+            short = hashlib.sha256(b"abc").hexdigest()
+            with self.assertRaises(manifest.ManifestError) as e:
+                manifest.download(manifest.Package("a", "https://x/a", short, 10), dest,
+                                  opener=lambda url, timeout: _Body(b"abc"))
+            self.assertIn("size", str(e.exception))
+            # no size declared (0): held to MAX_DOWNLOAD
+            with mock.patch.object(manifest, "MAX_DOWNLOAD", 2000):
+                Endless.reads = 0
+                with self.assertRaises(manifest.ManifestError):
+                    manifest.download(manifest.Package("a", "https://x/a", sha, 0), dest,
+                                      opener=lambda url, timeout: Endless())
+                self.assertEqual(2, Endless.reads)
+                manifest.download(manifest.Package("a", "https://x/a", short, 0), dest,
+                                  opener=lambda url, timeout: _Body(b"abc"))
+                self.assertEqual(b"abc", dest.read_bytes())
+                # a declared size beyond the cap is refused before anything is fetched
+                with self.assertRaises(manifest.ManifestError):
+                    manifest.download(manifest.Package("a", "https://x/a", sha, 3000), Path(d) / "big",
+                                      opener=lambda url, timeout: self.fail("fetched"))
 
     def test_signer_fingerprints_shown_before_trust(self):
         key, chain, fp = make_key("ec")

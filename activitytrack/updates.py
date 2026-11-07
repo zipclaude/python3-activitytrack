@@ -22,6 +22,7 @@ from dataclasses import dataclass
 
 from . import client, manifest
 from .manifest import ManifestError
+from .net import NetworkError
 from .versions import compare  # noqa: F401  (the interfaces order versions with it)
 
 # Status.state
@@ -212,19 +213,25 @@ class Updates:
         version = re.sub(r"[^A-Za-z0-9.+~_-]", "_", release.version)
         dest = folder / f"activitytrack-{package.component}-{version}{_extension(package.component)}"
 
+        # the server's answer is held to the size the manifest declares (or to the cap when it declares none)
+        limit = package.size or manifest.MAX_DOWNLOAD
+
         def opener(url, timeout):
-            return _Reply(self._open(http, url))
+            return _Reply(self._open(http, url, limit))
 
         return manifest.download(package, dest, opener=opener)
 
     @staticmethod
-    def _open(http, url):
-        if url.startswith(PREFIX):
-            status, body = http.exchange("GET", url[len(PREFIX):])
-            if status != 200:
-                raise ManifestError(f"HTTP {status}")
-            return body
-        raise ManifestError("not a file of the server")
+    def _open(http, url, limit):
+        if not url.startswith(PREFIX):
+            raise ManifestError("not a file of the server")
+        try:
+            status, body = http.exchange("GET", url[len(PREFIX):], max_bytes=limit)
+        except NetworkError as e:
+            raise ManifestError(str(e)) from e
+        if status != 200:
+            raise ManifestError(f"HTTP {status}")
+        return body
 
 
 def _extension(name):

@@ -24,7 +24,7 @@ import json
 import ssl
 import urllib.request
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from cryptography import x509
@@ -39,6 +39,8 @@ ALGORITHMS = ("ES256", "RS256")
 MAX_BYTES = 1024 * 1024
 # the packages the server itself keeps (docs/SYNC.md §12.4): only a manifest the server relayed may name them
 SERVER_FILES = "/api/v1/update/files/"
+# the most a package may weigh; a package declaring no size (0) is held to it, one declaring more is refused
+MAX_DOWNLOAD = 1 << 30
 
 
 class ManifestError(Exception):
@@ -120,9 +122,10 @@ def verify(text, trusted):
         doc = json.loads(text)
         payload_b64 = doc["payload"]
         signatures = doc["signatures"]
-        if not isinstance(payload_b64, str) or not isinstance(signatures, list):
+        # base64url is ASCII: anything else is no payload (and would not encode below)
+        if not isinstance(payload_b64, str) or not payload_b64.isascii() or not isinstance(signatures, list):
             raise TypeError
-    except (ValueError, KeyError, TypeError) as e:
+    except (ValueError, KeyError, TypeError, RecursionError) as e:
         raise ManifestError("not a signed manifest") from e
     for s in signatures:
         try:
@@ -131,9 +134,9 @@ def verify(text, trusted):
             alg = header["alg"]
             leaf = base64.b64decode(header["x5c"][0], validate=True)
             signature = _unb64u(s["signature"])
-        except (ValueError, KeyError, TypeError, IndexError, ManifestError):
+        except (ValueError, KeyError, TypeError, IndexError, ManifestError, RecursionError):
             continue
-        if alg not in ALGORITHMS or fingerprint(leaf) not in pins:
+        if not protected_b64.isascii() or alg not in ALGORITHMS or fingerprint(leaf) not in pins:
             continue
         try:
             cert = x509.load_der_x509_certificate(leaf)
@@ -142,7 +145,7 @@ def verify(text, trusted):
         if _check_signature(cert, alg, f"{protected_b64}.{payload_b64}".encode("ascii"), signature):
             try:
                 payload = json.loads(_unb64u(payload_b64))
-            except ValueError as e:
+            except (ValueError, RecursionError) as e:
                 raise ManifestError("bad payload") from e
             if not isinstance(payload, dict) or payload.get("format") != FORMAT:
                 raise ManifestError("not an update manifest")
@@ -157,16 +160,30 @@ def signer_fingerprints(text):
         for s in json.loads(text)["signatures"]:
             leaf = base64.b64decode(json.loads(_unb64u(s["protected"]))["x5c"][0], validate=True)
             found.append(fingerprint(leaf))
-    except (ValueError, KeyError, TypeError, IndexError, ManifestError):
+    except (ValueError, KeyError, TypeError, IndexError, ManifestError, RecursionError):
         pass
     return found
 
 
 def _when(text):
+    """An ISO time as an aware datetime: one without an offset (a date, a time of nobody's zone) is UTC, so
+    two of them always compare; None when it is not a time."""
     try:
-        return datetime.fromisoformat(str(text).replace("Z", "+00:00"))
+        moment = datetime.fromisoformat(str(text).replace("Z", "+00:00"))
     except ValueError:
         return None
+    return moment if moment.tzinfo is not None else moment.replace(tzinfo=timezone.utc)
+
+
+def _package(p, server=False):
+    """A package of a release, or None when it is not one: a component, an https address, a SHA-256, and
+    a size that is a whole number of bytes (0: not declared)."""
+    size = p.get("size") or 0
+    if isinstance(size, bool) or not isinstance(size, int) or size < 0:
+        return None
+    if not _address_ok(p["url"], server) or len(normalize(p["sha256"])) != 64:
+        return None
+    return Package(p["component"], p["url"], normalize(p["sha256"]), size)
 
 
 def _address_ok(url, server):
@@ -180,12 +197,10 @@ def releases(payload, server=False):
     """The well-formed releases of a verified payload; anything malformed is left out. [server]:
     the manifest is the paired server's, so a package may be one of the server's own files."""
     out = []
-    for o in payload.get("releases") or ():
+    items = payload.get("releases")
+    for o in items if isinstance(items, list) else ():
         try:
-            packages = tuple(
-                Package(p["component"], p["url"], normalize(p["sha256"]), int(p.get("size") or 0))
-                for p in o["packages"]
-                if _address_ok(p["url"], server) and len(normalize(p["sha256"])) == 64)
+            packages = tuple(x for x in (_package(p, server) for p in o["packages"]) if x is not None)
             if not packages:
                 continue
             out.append(Release(str(o["version"]), str(o.get("channel") or "prod"), str(o.get("published") or ""),
@@ -233,9 +248,14 @@ def verify_file(path, sha256):
 
 def download(package, dest, opener=None, timeout=60):
     """Fetch [package] to the file [dest]; the file stays only if its sha256 matches (else
-    ManifestError and nothing is left). [opener](address, timeout): the paired server's files
-    (relative address) go through its authorisation, so they need one."""
+    ManifestError and nothing is left). The size is bounded: reading stops, and the file is dropped, past the
+    package's declared size (the manifest is signed, so it is the truth) or, when it declares none (0), past
+    MAX_DOWNLOAD; a file shorter than the declared size is refused too. [opener](address, timeout): the paired
+    server's files (relative address) go through its authorisation, so they need one."""
     from . import client
+    limit = package.size or MAX_DOWNLOAD
+    if limit > MAX_DOWNLOAD:
+        raise ManifestError("too large")
     dest = Path(dest)
     part = dest.with_name(dest.name + ".part")
     if opener is None:
@@ -250,9 +270,15 @@ def download(package, dest, opener=None, timeout=60):
     h = hashlib.sha256()
     try:
         with opener(package.url, timeout) as r, open(part, "wb") as f:
+            total = 0
             for chunk in iter(lambda: r.read(1 << 20), b""):
+                total += len(chunk)
+                if total > limit:
+                    raise ManifestError("larger than declared")
                 h.update(chunk)
                 f.write(chunk)
+        if package.size and total != package.size:
+            raise ManifestError("size does not match")
         if h.hexdigest() != package.sha256:
             raise ManifestError("sha256 does not match")
         part.replace(dest)

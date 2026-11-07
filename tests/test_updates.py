@@ -8,6 +8,7 @@ from unittest import mock
 
 import activitytrack
 from activitytrack import manifest, updates
+from activitytrack.net import NetworkError
 from activitytrack.pairing import Account
 from activitytrack.policy import Policy
 from activitytrack.session import Session
@@ -29,10 +30,13 @@ def releases(component="desktop-tar", url=FILE, issued="2026-11-07T10:00:00Z"):
 class Down:
     """The paired server's http: the files it keeps."""
     def __init__(self, body=b"package", status=200):
-        self.body, self.status, self.asked = body, status, []
+        self.body, self.status, self.asked, self.limits = body, status, [], []
 
-    def exchange(self, method, path, body=None, content_type=None, headers=None):
+    def exchange(self, method, path, body=None, content_type=None, headers=None, max_bytes=None):
         self.asked.append((method, path))
+        self.limits.append(max_bytes)
+        if max_bytes is not None and len(self.body) > max_bytes:
+            raise NetworkError(f"answer longer than {max_bytes} bytes")
         return self.status, self.body
 
 
@@ -227,6 +231,45 @@ class UpdatesTest(unittest.TestCase):
         with mock.patch.object(self.session, "http", return_value=Down(status=404)):
             with self.assertRaises(manifest.ManifestError):
                 self.u.download(release, Path(self.dir.name) / "out3")
+
+    def test_the_server_cannot_send_more_than_the_manifest_declares(self):
+        self.pair()
+        self.relay()
+        release = self.u.status().release
+        # the manifest declares 7 bytes ("package")
+        down = Down(body=b"package, and then some")
+        with mock.patch.object(self.session, "http", return_value=down):
+            with self.assertRaises(manifest.ManifestError) as e:
+                self.u.download(release, Path(self.dir.name) / "out")
+        self.assertIn("longer", str(e.exception))
+        self.assertEqual([7], down.limits)
+        self.assertEqual([], list((Path(self.dir.name) / "out").iterdir()))
+        # shorter than declared: refused too
+        with mock.patch.object(self.session, "http", return_value=Down(body=b"pack")):
+            with self.assertRaises(manifest.ManifestError):
+                self.u.download(release, Path(self.dir.name) / "out")
+
+    def test_a_package_without_a_size_is_held_to_the_cap(self):
+        self.pair()
+        p = releases()
+        for r in p["releases"]:
+            del r["packages"][0]["size"]
+        self.session.store.set_state("update.manifest", manifest.sign(p, self.key, self.chain))
+        release = self.u.status().release
+        down = Down()
+        with mock.patch.object(self.session, "http", return_value=down):
+            self.u.download(release, Path(self.dir.name) / "out")
+        self.assertEqual([manifest.MAX_DOWNLOAD], down.limits)
+
+    def test_a_manifest_with_odd_times_is_not_a_crash(self):
+        self.pair()
+        # the issue time of the manifest without an offset, the stored one with: still compared
+        self.session.store.set_state("update.issued", "2026-11-06T20:00:00+02:00")
+        self.session.store.set_state("update.manifest", manifest.sign(releases(issued="2026-11-07"),
+                                                                      self.key, self.chain))
+        self.assertEqual(updates.AVAILABLE, self.u.status().state)
+        self.session.store.set_state("update.issued", "2026-11-08")
+        self.assertEqual(updates.UNTRUSTED, self.u.status().state)
 
     def test_a_file_of_the_server_only_in_the_servers_manifest(self):
         # a file of the server is a package only in the manifest the server relayed, and only its own

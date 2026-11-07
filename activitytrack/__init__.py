@@ -7,14 +7,14 @@ pairing and the token.
 """
 
 # aligned with the app, the web and the interfaces
-__version__ = "0.9.6"
+__version__ = "0.9.8"
 
 # who calls the server (headers, User-Agent): the interface sets it at start
 _client = {"name": "ActivityTrack", "version": __version__}
 
 
 def set_client(name, version):
-    """The interface's name and version, as the server and GitHub see them."""
+    """The interface's name and version, as the server and GitLab see them."""
     _client.update(name=name, version=version)
 
 

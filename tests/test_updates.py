@@ -139,22 +139,54 @@ class UpdatesTest(unittest.TestCase):
 
     def test_an_installation_of_the_package_manager_is_never_offered_the_download(self):
         self.pair()
-        self.relay(component="desktop-deb")
-        with mock.patch.object(manifest, "from_package_manager", return_value=True):
+        self.relay(component="desktop-deb13")
+        with mock.patch.object(manifest, "from_package_manager", return_value=True), \
+                mock.patch.object(updates, "distro", return_value="deb13"):
             s = self.u.status()
             self.assertEqual((updates.AVAILABLE, False), (s.state, s.downloadable))
             with self.assertRaises(manifest.ManifestError):
                 self.u.download(s.release, Path(self.dir.name))
 
     def test_components_of_the_interfaces(self):
-        for name, want in (("ActivityTrackDesktop", "desktop-tar"), ("ActivityTrackCli", None), ("Other", None)):
+        # not installed by a package manager: the tar of the interface
+        for name, want in (("ActivityTrackDesktop", "desktop-tar"), ("ActivityTrackCli", "cli-tar"),
+                           ("ActivityTrackTui", "tui-tar"), ("Other", None)):
             activitytrack.set_client(name, "0.9.8")
             self.assertEqual(want, updates.component(), name)
+        with mock.patch("sys.platform", "win32"):
+            activitytrack.set_client("ActivityTrackCli", "0.9.8")
+            self.assertEqual("cli-windows", updates.component())
+        # a package of the distribution: named by interface and distribution
         with mock.patch.object(manifest, "from_package_manager", return_value=True):
-            for name, want in (("ActivityTrackDesktop", "desktop-deb"), ("ActivityTrackCli", "cli-deb"),
-                               ("ActivityTrackTui", "tui-deb")):
-                activitytrack.set_client(name, "0.9.8")
-                self.assertEqual(want, updates.component(), name)
+            for suffix in ("deb13", "deb14", "ubuntu24.04", "ubuntu26.04"):
+                with mock.patch.object(updates, "distro", return_value=suffix):
+                    for name, which in (("ActivityTrackDesktop", "desktop"), ("ActivityTrackCli", "cli"),
+                                        ("ActivityTrackTui", "tui")):
+                        activitytrack.set_client(name, "0.9.8")
+                        self.assertEqual(f"{which}-{suffix}", updates.component(), name)
+            # another distribution: no package of ours, no download (the version is still shown)
+            with mock.patch.object(updates, "distro", return_value=None):
+                self.assertIsNone(updates.component())
+
+    def test_the_distribution_from_os_release(self):
+        def release(text):
+            path = Path(self.dir.name) / "os-release"
+            path.write_text(text)
+            return updates.distro(str(path))
+        self.assertEqual("deb13", release('PRETTY_NAME="Debian GNU/Linux 13 (trixie)"\nID=debian\nVERSION_ID="13"\n'))
+        # testing has no VERSION_ID, only the codename
+        self.assertEqual("deb14", release("ID=debian\nVERSION_CODENAME=forky\n"))
+        self.assertEqual("ubuntu24.04", release('ID=ubuntu\nVERSION_ID="24.04"\nID_LIKE=debian\n'))
+        self.assertEqual("ubuntu26.04", release("ID=ubuntu\nVERSION_ID=26.04\n"))
+        # derivatives and others are not guessed
+        self.assertIsNone(release('ID=linuxmint\nVERSION_ID="22"\nID_LIKE="ubuntu debian"\n'))
+        self.assertIsNone(release("ID=debian\nVERSION_ID=12\n"))
+        self.assertIsNone(updates.distro(str(Path(self.dir.name) / "missing")))
+
+    def test_the_name_of_the_file_follows_the_component(self):
+        for name, want in (("desktop-deb13", ".deb"), ("cli-ubuntu24.04", ".deb"), ("tui-tar", ".tar.gz"),
+                           ("desktop-windows", ".exe"), ("cli-windows", ".zip")):
+            self.assertEqual(want, updates._extension(name), name)
 
     def test_check_asks_the_server(self):
         self.pair()

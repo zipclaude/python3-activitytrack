@@ -9,8 +9,9 @@ never offered anything. No upstream and no custom address here (those are the ph
     check()      asks the server now, then status()
     download()   the package of the release to a folder, its sha256 checked
 
-An installation made by the distribution's package manager keeps the check but is never offered the
-download: the package manager updates it. The check itself is a setting (and a policy may fix it, as
+The packages are named per distribution in the manifest (docs/UPDATES.md of the app). An installation made by
+the distribution's package manager keeps the check but is never offered the download: the package manager
+updates it. The check itself is a setting (and a policy may fix it, as
 `updateCheck` and `updateBetas` do); the channels followed are always prod plus, with the beta switch, beta.
 """
 
@@ -30,7 +31,10 @@ DAY_S = 24 * 3600
 CHECK, BETAS, ISSUED, MANIFEST, CHECKED = "updates.check", "updates.betas", "update.issued", "update.manifest", \
     "updates.checked"
 PREFIX = "/api/v1/"
-EXTENSIONS = {"deb": ".deb", "windows": ".exe", "tar": ".tar.gz"}
+# the distributions the project builds a .deb for: (os-release ID, VERSION_ID or VERSION_CODENAME) -> suffix
+DISTROS = {("debian", "13"): "deb13", ("debian", "trixie"): "deb13", ("debian", "14"): "deb14",
+           ("debian", "forky"): "deb14", ("ubuntu", "24.04"): "ubuntu24.04", ("ubuntu", "26.04"): "ubuntu26.04"}
+OS_RELEASE = "/etc/os-release"
 
 
 @dataclass(frozen=True)
@@ -51,17 +55,33 @@ def interface():
     return None
 
 
+def distro(path=OS_RELEASE):
+    """The suffix of this system's packages (deb13, deb14, ubuntu24.04, ubuntu26.04), or None for any other."""
+    found = {}
+    try:
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                key, _eq, value = line.strip().partition("=")
+                found[key] = value.strip("\"'")
+    except OSError:
+        return None
+    return (DISTROS.get((found.get("ID"), found.get("VERSION_ID", "")))
+            or DISTROS.get((found.get("ID"), found.get("VERSION_CODENAME", ""))))
+
+
 def component():
-    """The package this installation takes: desktop-deb, desktop-windows, desktop-tar, cli-deb, tui-deb;
-    None for an interface with no package of its own for this installation."""
+    """The package this installation takes, as the manifest names it: <desktop|cli|tui>-<deb13|deb14|ubuntu24.04|
+    ubuntu26.04> for the distribution's package, -windows on Windows, -tar for any other installation. None
+    when the interface is unknown or the distribution has no package of ours (the version is still shown)."""
     which = interface()
     if which is None:
         return None
+    if sys.platform == "win32":
+        return f"{which}-windows"
     if manifest.from_package_manager():
-        return f"{which}-deb"
-    if which == "desktop":
-        return "desktop-windows" if sys.platform == "win32" else "desktop-tar"
-    return None
+        suffix = distro()
+        return f"{which}-{suffix}" if suffix else None
+    return f"{which}-tar"
 
 
 class Updates:
@@ -190,8 +210,7 @@ class Updates:
         folder = folder or self.session.folder / "updates"
         folder.mkdir(parents=True, exist_ok=True)
         version = re.sub(r"[^A-Za-z0-9.+~_-]", "_", release.version)
-        kind = package.component.rsplit("-", 1)[-1]
-        dest = folder / f"activitytrack-{package.component}-{version}{EXTENSIONS.get(kind, '')}"
+        dest = folder / f"activitytrack-{package.component}-{version}{_extension(package.component)}"
 
         def opener(url, timeout):
             return _Reply(self._open(http, url))
@@ -206,6 +225,15 @@ class Updates:
                 raise ManifestError(f"HTTP {status}")
             return body
         raise ManifestError("not a file of the server")
+
+
+def _extension(name):
+    kind = name.rsplit("-", 1)[-1]
+    if kind == "tar":
+        return ".tar.gz"
+    if kind == "windows":
+        return ".exe" if name.startswith("desktop-") else ".zip"
+    return ".deb"
 
 
 class _Reply:

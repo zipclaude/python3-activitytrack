@@ -111,8 +111,20 @@ class Updates:
 
     # ---- what the server said ----
 
-    def status(self):
-        """The newest release after this version, from the manifest stored at the last sync."""
+    def channels_for(self, requested=None):
+        """The channels to follow: the setting's, or [requested] (one name or several) plus prod for
+        this run only; a policy that fixes updateBetas off keeps the beta out whatever is asked."""
+        if not requested:
+            return self.channels
+        asked = {requested} if isinstance(requested, str) else set(requested)
+        p = self.policy()
+        if p.setting_fixed("updateBetas") and not p.setting("updateBetas", False):
+            asked.discard("beta")
+        return ("prod", *sorted(asked - {"prod"}))
+
+    def status(self, channels=None):
+        """The newest release after this version, from the manifest stored at the last sync;
+        [channels]: for this run instead of the setting (see channels_for)."""
         account = self.session.account
         if account is None:
             return Status(UNPAIRED)
@@ -125,10 +137,10 @@ class Updates:
             return Status(NONE)
         want = component()
         try:
-            found, issued = self._find(text, account.update_key, want)
+            found, issued = self._find(text, account.update_key, want, channels)
             if found is None and want is not None:
                 # a newer release without a package for this installation: said, not offered
-                found, issued = self._find(text, account.update_key, None)
+                found, issued = self._find(text, account.update_key, None, channels)
                 want = None
         except ManifestError as e:
             return Status(UNTRUSTED, error=str(e))
@@ -137,16 +149,17 @@ class Updates:
             return Status(NONE)
         return Status(AVAILABLE, found, downloadable=want is not None and not manifest.from_package_manager())
 
-    def _find(self, text, key, want):
-        return manifest.check(text, [key], self.version, self.channels, want, self.store.get_state(ISSUED), server=True)
+    def _find(self, text, key, want, channels=None):
+        return manifest.check(text, [key], self.version, self.channels_for(channels), want,
+                              self.store.get_state(ISSUED), server=True)
 
-    def check(self, now=None):
+    def check(self, now=None, channels=None):
         """Asks the server now; the status after it (an unreachable server is an ERROR)."""
         failed = self.runner.refresh_update()
         if failed:
             return Status(ERROR, error=failed)
         self.store.set_state(CHECKED, now if now is not None else time.time())
-        return self.status()
+        return self.status(channels)
 
     def known_channels(self):
         """The channels the stored manifest has releases in (for a choice), prod first."""

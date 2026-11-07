@@ -106,6 +106,18 @@ class UpdatesTest(unittest.TestCase):
         self.assertEqual(("prod",), self.u.channels)
         self.assertEqual("0.9.9", self.u.status().release.version)
 
+    def test_channels_for_one_run(self):
+        self.pair()
+        self.relay()
+        self.assertEqual("0.9.9", self.u.status().release.version)
+        self.assertEqual("1.0.0-beta1", self.u.status(channels="beta").release.version)
+        self.assertEqual(("prod", "beta", "dev"), self.u.channels_for(["dev", "beta"]))
+        # the run's choice is not kept
+        self.assertEqual(("prod",), self.u.channels)
+        self.policy = Policy({"settings": {"updateBetas": {"value": False, "locked": True}}})
+        self.assertEqual(("prod", "dev"), self.u.channels_for(["beta", "dev"]))
+        self.assertEqual("0.9.9", self.u.status(channels="beta").release.version)
+
     def test_a_beta_follows_the_betas_by_default(self):
         activitytrack.set_client("ActivityTrackDesktop", "0.9.9-beta2")
         self.assertEqual(("prod", "beta"), self.u.channels)

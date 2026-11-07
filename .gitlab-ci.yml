@@ -38,6 +38,9 @@ linux:
 windows:
   stage: test
   tags: [saas-windows-medium-amd64]
+  # Windows only at the release (a version tag): the shared Windows runners are paid
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v[0-9]/
   script:
     - choco install python313 --no-progress -y
     - $env:Path = "C:\Python313;C:\Python313\Scripts;" + $env:Path

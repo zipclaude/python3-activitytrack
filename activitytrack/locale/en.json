@@ -99,5 +99,14 @@
  "oggi": "today",
  "sab": "Sat",
  "scad. %s": "due %s",
- "ven": "Fri"
+ "ven": "Fri",
+ "Controllo degli aggiornamenti disattivato.": "Update check is off.",
+ "Non associato: gli aggiornamenti arrivano dal server a cui il PC è associato.": "Not paired: updates come from the server this PC is paired with.",
+ "Il collegamento di associazione non portava la chiave del server per gli aggiornamenti: associa di nuovo il PC per riceverli.": "The pairing link did not carry the server's key for updates: pair the PC again to receive them.",
+ "L'annuncio del server non è firmato con la sua chiave: ignorato.": "The server's announcement is not signed with its key: ignored.",
+ "È disponibile la versione %s.": "Version %s is available.",
+ "Si aggiorna con il gestore di pacchetti del sistema.": "It is updated by the system's package manager.",
+ "Per questa installazione il server non ha un pacchetto.": "The server has no package for this installation.",
+ "Nessun aggiornamento: %s è l'ultima versione.": "No update: %s is the latest version.",
+ "Server non raggiungibile: %s": "Server not reachable: %s"
 }

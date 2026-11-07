@@ -163,6 +163,31 @@ def sync_needs_attention(session, state="idle"):
                 or session.store.get_state("incompatible") or state == "failed")
 
 
+def update_state(status, version):
+    """What the updates screen says of an updates.Status; [version] is the installed one."""
+    from . import manifest, updates
+    s = status.state
+    if s == updates.OFF:
+        return _("Controllo degli aggiornamenti disattivato.")
+    if s == updates.UNPAIRED:
+        return _("Non associato: gli aggiornamenti arrivano dal server a cui il PC è associato.")
+    if s == updates.UNTRUSTED:
+        if status.error == "no key":
+            return _("Il collegamento di associazione non portava la chiave del server per gli aggiornamenti: "
+                     "associa di nuovo il PC per riceverli.")
+        return _("L'annuncio del server non è firmato con la sua chiave: ignorato.")
+    if s == updates.ERROR:
+        return _("Server non raggiungibile: %s") % status.error
+    if s == updates.AVAILABLE:
+        text = _("È disponibile la versione %s.") % status.release.version
+        if status.downloadable:
+            return text
+        if manifest.from_package_manager():
+            return text + " " + _("Si aggiorna con il gestore di pacchetti del sistema.")
+        return text + " " + _("Per questa installazione il server non ha un pacchetto.")
+    return _("Nessun aggiornamento: %s è l'ultima versione.") % version
+
+
 def entry_commands(entry, policy):
     """[(label, command)] the state allows, as the app's card buttons (every interface)."""
     from .work import STOP, SUSPEND

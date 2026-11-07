@@ -21,7 +21,7 @@ One application, whatever the interface: they share the data folder
 | `policy` | the user's policy, the keys the PC uses |
 | `work`, `todos` | the rules of activities and to-dos, as the app's |
 | `reminders` | the reminders' planner, as the app's |
-| `updates` | version order (the old GitLab releases check, replaced by `manifest`) |
+| `updates`, `versions` | the updates of the PC from the paired server (its signed manifest, the pinned key of the pairing link), the order of versions |
 | `manifest` | the signed update manifest: JWS check against pinned signers, channels, sha256 of the package |
 | `i18n`, `texts`, `locale/` | the texts in it, en, de, es |
 

@@ -162,6 +162,31 @@ class RunnerTest(unittest.TestCase):
         self.store.close()
         self.dir.cleanup()
 
+    def test_the_manifest_of_the_server_is_kept_at_each_sync(self):
+        from activitytrack.sync import Runner
+        r = Runner(_Session(self.store, self.server))
+        r.run()
+        self.assertIsNone(self.store.get_state("update.manifest"))
+        self.server.update = '{"payload": "x"}'
+        r.run()
+        self.assertEqual(self.store.get_state("update.manifest"), '{"payload": "x"}')
+        self.server.put("todo", "t1", {"title": "x"})
+        r.run(full=False)
+        self.assertEqual(self.store.get_state("update.manifest"), '{"payload": "x"}')
+        # an older server says nothing: what is there stays; a null or an absurd value clears it
+        self.server.update = ...
+        r.run()
+        self.assertIsNotNone(self.store.get_state("update.manifest"))
+        self.server.update = None
+        r.run()
+        self.assertIsNone(self.store.get_state("update.manifest"))
+        self.server.update = "x" * (2 * 1024 * 1024)
+        r.run()
+        self.assertIsNone(self.store.get_state("update.manifest"))
+        self.assertEqual("", r.refresh_update())
+        self.server.status = 401
+        self.assertEqual("revoked", r.refresh_update())
+
     def test_the_states(self):
         from activitytrack.net import NetworkError
         from activitytrack.sync import Runner

@@ -17,6 +17,8 @@ class FakeServer:
         self.refuse = set()
         self.status = None
         self.requests = []
+        # the signed update manifest the server relays in sync/head (absent: an older server)
+        self.update = ...
 
     def put(self, type_, uid, fields, at=0, central=False):
         """A change made on the server (the web, another phone)."""
@@ -43,7 +45,10 @@ class FakeServer:
             return Reply(self.status, json.dumps({"error": "app_too_old"}) if self.status == 426 else "{}")
         u = urlsplit(path)
         if u.path == "sync/head":
-            return self._ok({"rev": self.rev, "serverTime": self.now(), "filesMaxMb": 25})
+            head = {"rev": self.rev, "serverTime": self.now(), "filesMaxMb": 25}
+            if self.update is not ...:
+                head["update"] = self.update
+            return self._ok(head)
         if u.path == "sync/pull":
             q = parse_qs(u.query)
             return self._ok(self._pull(int(q["cursor"][0]), int(q["limit"][0])))

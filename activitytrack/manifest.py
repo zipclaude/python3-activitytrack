@@ -32,11 +32,13 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec, padding, rsa, utils
 
-from .updates import compare
+from .versions import compare
 
 FORMAT = "activitytrack-update-manifest"
 ALGORITHMS = ("ES256", "RS256")
 MAX_BYTES = 1024 * 1024
+# the packages the server itself keeps (docs/SYNC.md §12.4): only a manifest the server relayed may name them
+SERVER_FILES = "/api/v1/update/files/"
 
 
 class ManifestError(Exception):
@@ -167,15 +169,23 @@ def _when(text):
         return None
 
 
-def releases(payload):
-    """The well-formed releases of a verified payload; anything malformed is left out."""
+def _address_ok(url, server):
+    url = str(url)
+    if url.startswith("https://"):
+        return True
+    return server and url.startswith(SERVER_FILES) and url[len(SERVER_FILES):].isalnum()
+
+
+def releases(payload, server=False):
+    """The well-formed releases of a verified payload; anything malformed is left out. [server]:
+    the manifest is the paired server's, so a package may be one of the server's own files."""
     out = []
     for o in payload.get("releases") or ():
         try:
             packages = tuple(
                 Package(p["component"], p["url"], normalize(p["sha256"]), int(p.get("size") or 0))
                 for p in o["packages"]
-                if str(p["url"]).startswith("https://") and len(normalize(p["sha256"])) == 64)
+                if _address_ok(p["url"], server) and len(normalize(p["sha256"])) == 64)
             if not packages:
                 continue
             out.append(Release(str(o["version"]), str(o.get("channel") or "prod"), str(o.get("published") or ""),
@@ -185,7 +195,7 @@ def releases(payload):
     return out
 
 
-def newer(payload, current, channels=("prod",), component=None, last_issued=None):
+def newer(payload, current, channels=("prod",), component=None, last_issued=None, server=False):
     """The newest release after [current] in one of [channels] (with a package of [component],
     when given), or None. A manifest issued before [last_issued] (an ISO time, the one accepted
     last) is a replay of an older file and is refused."""
@@ -196,7 +206,7 @@ def newer(payload, current, channels=("prod",), component=None, last_issued=None
     if previous is not None and issued < previous:
         raise ManifestError("older than the last manifest")
     best = None
-    for r in releases(payload):
+    for r in releases(payload, server):
         if r.channel not in channels or compare(r.version, current) <= 0:
             continue
         if component is not None and r.package(component) is None:
@@ -206,10 +216,10 @@ def newer(payload, current, channels=("prod",), component=None, last_issued=None
     return best
 
 
-def check(text, trusted, current, channels=("prod",), component=None, last_issued=None):
+def check(text, trusted, current, channels=("prod",), component=None, last_issued=None, server=False):
     """Verify [text] and pick the release to offer: (release or None, the manifest's issue time)."""
     payload = verify(text, trusted)
-    return newer(payload, current, channels, component, last_issued), payload["issued"]
+    return newer(payload, current, channels, component, last_issued, server), payload["issued"]
 
 
 def verify_file(path, sha256):
@@ -223,16 +233,23 @@ def verify_file(path, sha256):
 
 def download(package, dest, opener=None, timeout=60):
     """Fetch [package] to the file [dest]; the file stays only if its sha256 matches (else
-    ManifestError and nothing is left). [opener] is for the paired server's authorisation."""
+    ManifestError and nothing is left). [opener](address, timeout): the paired server's files
+    (relative address) go through its authorisation, so they need one."""
     from . import client
     dest = Path(dest)
     part = dest.with_name(dest.name + ".part")
-    req = urllib.request.Request(package.url, headers={"User-Agent": f"{client()['name']}/{client()['version']}"})
-    context = ssl.create_default_context()
-    open_ = opener or urllib.request.build_opener(urllib.request.HTTPSHandler(context=context)).open
+    if opener is None:
+        if not package.url.startswith("https://"):
+            raise ManifestError("a file of the server needs the server's authorisation")
+        me = client()
+        web = urllib.request.build_opener(urllib.request.HTTPSHandler(context=ssl.create_default_context()))
+
+        def opener(url, timeout):
+            return web.open(urllib.request.Request(url, headers={"User-Agent": f"{me['name']}/{me['version']}"}),
+                            timeout=timeout)
     h = hashlib.sha256()
     try:
-        with open_(req, timeout=timeout) as r, open(part, "wb") as f:
+        with opener(package.url, timeout) as r, open(part, "wb") as f:
             for chunk in iter(lambda: r.read(1 << 20), b""):
                 h.update(chunk)
                 f.write(chunk)

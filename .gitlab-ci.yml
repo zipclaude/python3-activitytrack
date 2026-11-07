@@ -1,7 +1,8 @@
 # CI of python3-activitytrack on GitLab (free plan: the shared runners' minutes
-# are limited, so pipelines run for merge requests, the default branch and tags;
-# a tag vX.Y.Z builds the Debian/Ubuntu packages, tries them and publishes the
-# release). "Run pipeline" by hand does everything but publishing.
+# are limited, so no pipeline starts on its own: see the workflow rules below).
+# Started by hand on a branch it tests, builds and tries the packages, and
+# publishes nothing; started by hand on a tag vX.Y.Z it also publishes the
+# release (the release job runs for any pipeline of a v<digit> tag).
 
 # Shared-runner minutes are paid: no pipeline starts on its own (not on pushes,
 # merge requests or tags). Start one by hand ("Run pipeline" on a branch or tag,
@@ -41,13 +42,11 @@ windows:
     - python -m pip install .
     - python -m unittest discover -s tests -t . -v
 
-# the packages are tried on a tag, by hand, and in merge requests that touch the packaging
+# the packages are built on a tag and in a pipeline started by hand
 .packaging:
   rules:
     - if: $CI_COMMIT_TAG =~ /^v[0-9]/
     - if: $CI_PIPELINE_SOURCE == "web"
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-      changes: ["debian/**/*", pyproject.toml, .gitlab-ci.yml]
 
 deb:
   extends: .packaging

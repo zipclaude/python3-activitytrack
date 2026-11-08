@@ -1,3 +1,15 @@
+python-activitytrack (0.9.9-1) unstable; urgency=medium
+
+  * Release 0.9.9, in step with ActivityTrack 0.9.9: the PC learns of newer
+    versions from the paired server, which relays a signed manifest (JWS,
+    ES256 or RS256) checked against the key pinned from the pairing link (the
+    link may carry k, the fingerprint of the server's key); the package is
+    downloaded with its sha256 checked, never for an installation of the
+    package manager. The unsigned check of the GitLab releases is gone. Wire
+    schema unchanged (1, translated by the server).
+
+ -- ActivityTrack <flavio-claude@zipman.it>  Sun, 08 Nov 2026 04:00:00 +0000
+
 python-activitytrack (0.9.8-1) unstable; urgency=medium
 
   * Release 0.9.8, in step with ActivityTrack 0.9.8: the first release from

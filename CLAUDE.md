@@ -41,5 +41,5 @@ The job `windows` of `.gitlab-ci.yml` runs the same tests on Windows (paid share
 
 ## 3. A release touches
 
-- `activitytrack/__init__.py` (version), `debian/changelog` (`X.Y.Z-1`; a beta is `X.Y.Z~betaN-1`).
+- `activitytrack/__init__.py` (version), `debian/changelog` (`X.Y.Z-1`; a beta is `X.Y.Z~beta-N-1`).
 - The tag `vX.Y.Z` is what the cli, tui and desktop name in `.gitlab/lib-ref`: release the library **first**.

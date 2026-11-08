@@ -10,9 +10,9 @@ Build-Depends: debhelper-compat (= 13),
  python3-cryptography <!nocheck>,
  python3-keyring <!nocheck>
 Standards-Version: 4.7.0
-Homepage: https://gitlab.com/infraconsulting/python3-activitytrack
-Vcs-Git: https://gitlab.com/infraconsulting/python3-activitytrack.git
-Vcs-Browser: https://gitlab.com/infraconsulting/python3-activitytrack
+Homepage: https://gitlab.com/activitytrack/python3-activitytrack
+Vcs-Git: https://gitlab.com/activitytrack/python3-activitytrack.git
+Vcs-Browser: https://gitlab.com/activitytrack/python3-activitytrack
 Testsuite: autopkgtest-pkg-pybuild
 Rules-Requires-Root: no
 

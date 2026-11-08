@@ -1,15 +1,15 @@
 # python3-activitytrack
 
-The library of [ActivityTrack](https://gitlab.com/infraconsulting/activitytrack) on the PC: what its
+The library of [ActivityTrack](https://gitlab.com/activitytrack/activitytrack) on the PC: what its
 interfaces share.
 
-- [activitytrack-desktop](https://gitlab.com/infraconsulting/activitytrack-desktop): the tray application;
-- [activitytrack-cli](https://gitlab.com/infraconsulting/activitytrack-cli): the command line;
-- [activitytrack-tui](https://gitlab.com/infraconsulting/activitytrack-tui): the text interface.
+- [activitytrack-desktop](https://gitlab.com/activitytrack/activitytrack-desktop): the tray application;
+- [activitytrack-cli](https://gitlab.com/activitytrack/activitytrack-cli): the command line;
+- [activitytrack-tui](https://gitlab.com/activitytrack/activitytrack-tui): the text interface.
 
 One application, whatever the interface: they share the data folder
 (`~/.local/share/activitytrack`, `%APPDATA%\activitytrack`), the pairing with
-[ActivityTrack Web](https://gitlab.com/infraconsulting/activitytrack-web) and the token.
+[ActivityTrack Web](https://gitlab.com/activitytrack/activitytrack-web) and the token.
 
 ## Contents
 
@@ -30,9 +30,9 @@ No graphical toolkit: it runs on a server without a display too.
 ## Packages
 
 Debian 13 / 14 and Ubuntu 24.04 / 26.04: `python3-activitytrack`, from the
-[releases](https://gitlab.com/infraconsulting/python3-activitytrack/-/releases) (source package
+[releases](https://gitlab.com/activitytrack/python3-activitytrack/-/releases) (source package
 `python-activitytrack`, built with pybuild). Elsewhere:
-`pip install git+https://gitlab.com/infraconsulting/python3-activitytrack@v<version>`.
+`pip install git+https://gitlab.com/activitytrack/python3-activitytrack@v<version>`.
 
 ## Development
 

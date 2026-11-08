@@ -99,5 +99,14 @@
  "oggi": "hoy",
  "sab": "sáb",
  "scad. %s": "vence %s",
- "ven": "vie"
+ "ven": "vie",
+ "Controllo degli aggiornamenti disattivato.": "La búsqueda de actualizaciones está desactivada.",
+ "Non associato: gli aggiornamenti arrivano dal server a cui il PC è associato.": "Sin vincular: las actualizaciones llegan del servidor al que está vinculado el PC.",
+ "Il collegamento di associazione non portava la chiave del server per gli aggiornamenti: associa di nuovo il PC per riceverli.": "El enlace de vinculación no incluía la clave del servidor para las actualizaciones: vincule de nuevo el PC para recibirlas.",
+ "L'annuncio del server non è firmato con la sua chiave: ignorato.": "El aviso del servidor no está firmado con su clave: ignorado.",
+ "È disponibile la versione %s.": "La versión %s está disponible.",
+ "Si aggiorna con il gestore di pacchetti del sistema.": "Se actualiza con el gestor de paquetes del sistema.",
+ "Per questa installazione il server non ha un pacchetto.": "El servidor no tiene paquete para esta instalación.",
+ "Nessun aggiornamento: %s è l'ultima versione.": "Sin actualizaciones: %s es la última versión.",
+ "Server non raggiungibile: %s": "Servidor no accesible: %s"
 }

@@ -3,10 +3,14 @@
 Pairing with ActivityTrack Web, as the phone (server docs/SYNC.md §9,
 app domain/sync/Pairing.kt): the web shows a one-time link
 
-    activitytrack://pair?v=1&u=<server>&c=<code>[&f=<pin>]
+    activitytrack://pair?v=1&u=<server>&c=<code>[&f=<pin>][&k=<key>]
 
 pasted here; `f` is the base64 SHA-256 of the server's public key, present
-when its certificate is self-signed. POST api/v1/pair gives the token.
+when its certificate is self-signed. `k` is the SHA-256 fingerprint (64 hex
+digits) of the key with which the server signs the update manifests: the
+only one this PC trusts for them (activitytrack#1). A link without `k` pins
+nothing, and the server's updates are never trusted. POST api/v1/pair gives
+the token.
 """
 
 import base64
@@ -38,6 +42,7 @@ class PairLink:
     server: str
     code: str
     pin: str | None
+    update_key: str | None = None
 
     @classmethod
     def parse(cls, text, allow_http=False):
@@ -65,7 +70,12 @@ class PairLink:
                 ok = False
             if not ok:
                 raise PairError(BAD_PIN)
-        return cls(server, code, pin)
+        update_key = q.get("k", "").strip() or None
+        if update_key is not None:
+            update_key = update_key.lower()
+            if len(update_key) != 64 or any(c not in "0123456789abcdef" for c in update_key):
+                raise PairError(BAD_PIN)
+        return cls(server, code, pin, update_key)
 
 
 @dataclass(frozen=True)
@@ -78,6 +88,8 @@ class Account:
     name: str
     profile: str
     org: str
+    # SHA-256 fingerprint of the key that signs the server's update manifests (the link's `k`)
+    update_key: str | None = None
 
     def to_json(self):
         return json.dumps(self.__dict__)
@@ -123,7 +135,7 @@ def pair(link, allow_http=False):
         raise PairError(SERVER, f"HTTP {reply.status}")
     user = answer.get("user") or {}
     account = Account(
-        server=link.server, pin=link.pin, device_id=answer["deviceId"],
+        server=link.server, pin=link.pin, update_key=link.update_key, device_id=answer["deviceId"],
         username=user.get("username", ""), name=user.get("name", ""), profile=user.get("profile", ""),
         org=(answer.get("org") or {}).get("name", ""),
     )

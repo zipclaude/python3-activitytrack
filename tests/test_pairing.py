@@ -16,6 +16,18 @@ class PairLinkTest(unittest.TestCase):
         link = PairLink.parse(f"  activitytrack://pair?v=1&u=https%3A%2F%2F10.0.0.5&c=x&f={PIN.replace('+', '%2B')}\n")
         self.assertEqual(link.pin, PIN)
 
+    def test_the_key_of_the_manifests(self):
+        key = "AB" * 32
+        link = PairLink.parse(f"activitytrack://pair?v=1&u=https%3A%2F%2Fat.example.com&c=x&k={key}")
+        self.assertEqual(link.update_key, key.lower())
+        self.assertIsNone(PairLink.parse("activitytrack://pair?v=1&u=https%3A%2F%2Fat.example.com&c=x").update_key)
+
+    def test_an_account_of_an_older_version_has_no_key(self):
+        from activitytrack.pairing import Account
+        old = ('{"server": "https://a.b", "pin": null, "device_id": "d", "username": "u", "name": "n", '
+               '"profile": "p", "org": "o"}')
+        self.assertIsNone(Account.from_json(old).update_key)
+
     def assertRefused(self, text, code, **kw):
         with self.assertRaises(PairError) as e:
             PairLink.parse(text, **kw)
@@ -27,6 +39,8 @@ class PairLinkTest(unittest.TestCase):
         self.assertRefused("activitytrack://pair?v=1&u=https%3A%2F%2Fa.b", NOT_A_LINK)
         self.assertRefused("activitytrack://pair?v=1&u=http%3A%2F%2Fa.b&c=x", NOT_HTTPS)
         self.assertRefused("activitytrack://pair?v=1&u=https%3A%2F%2Fa.b&c=x&f=abc", BAD_PIN)
+        self.assertRefused("activitytrack://pair?v=1&u=https%3A%2F%2Fa.b&c=x&k=abc", BAD_PIN)
+        self.assertRefused(f"activitytrack://pair?v=1&u=https%3A%2F%2Fa.b&c=x&k={'zz' * 32}", BAD_PIN)
 
     def test_http_only_for_development(self):
         link = PairLink.parse("activitytrack://pair?v=1&u=http%3A%2F%2F127.0.0.1%3A8000&c=x", allow_http=True)

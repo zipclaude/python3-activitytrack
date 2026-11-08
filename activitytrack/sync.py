@@ -156,6 +156,10 @@ class SyncEngine:
 
 
 POLICY_EVERY_S = 300
+# what refresh_update() answers besides "" and an error text
+UNPAIRED, REVOKED, INCOMPATIBLE = "unpaired", "revoked", "incompatible"
+# a manifest is a few kilobytes: more is not one
+MAX_UPDATE = 1024 * 1024
 
 
 class Runner:
@@ -184,13 +188,19 @@ class Runner:
         if http is None:
             return "unpaired", ""
         engine = SyncEngine(store, http)
+        head = None
         try:
             if not full and not store.has_pending():
                 head = engine.head()
+                self.update(head)
                 if head.get("rev") == store.cursor:
                     store.set_state("incompatible", None)
                     changed = self.policy(http, force=False)
                     return ("ok" if changed else "idle"), ""
+            # the server tells here of a new version (docs/SYNC.md §12.4): the head is asked once a run
+            if head is None:
+                head = engine.head()
+                self.update(head)
             result = engine.sync()
             store.set_state("incompatible", None)
             self.policy(http, force=True)
@@ -207,6 +217,35 @@ class Runner:
             return "failed", str(e)
         except Exception as e:
             return "failed", f"{type(e).__name__}: {e}"
+
+    def update(self, head):
+        """The update manifest the server relays in sync/head, kept as it came (checked against the
+        pin when used); a server that has none (or an old one) leaves nothing."""
+        if "update" not in head:
+            return
+        text = head["update"]
+        if not isinstance(text, str) or len(text) > MAX_UPDATE:
+            text = None
+        self.session.store.set_state("update.manifest", text)
+
+    def refresh_update(self):
+        """Asks the server for its manifest now ("Check now"): "" when asked; UNPAIRED, REVOKED or
+        INCOMPATIBLE + ":" + the code of the server (wire.APP_TOO_OLD, wire.SERVER_TOO_OLD) when the server
+        refuses; else the text of what went wrong (the network)."""
+        try:
+            http = self.session.http()
+            if http is None:
+                return UNPAIRED
+            self.update(SyncEngine(self.session.store, http).head())
+        except SyncRevoked:
+            self.session.store.set_state("revoked", True)
+            return REVOKED
+        except SyncIncompatible as e:
+            self.session.store.set_state("incompatible", e.code)
+            return f"{INCOMPATIBLE}:{e.code}"
+        except (SyncFailed, NetworkError) as e:
+            return str(e) or "offline"
+        return ""
 
     def policy(self, http, force=True):
         """The user's policy; True when it changed. A text that is no policy keeps the last one."""

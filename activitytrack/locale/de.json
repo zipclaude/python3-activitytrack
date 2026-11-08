@@ -99,5 +99,14 @@
  "oggi": "heute",
  "sab": "Sa",
  "scad. %s": "fällig %s",
- "ven": "Fr"
+ "ven": "Fr",
+ "Controllo degli aggiornamenti disattivato.": "Die Update-Prüfung ist ausgeschaltet.",
+ "Non associato: gli aggiornamenti arrivano dal server a cui il PC è associato.": "Nicht gekoppelt: Updates kommen vom Server, mit dem dieser PC gekoppelt ist.",
+ "Il collegamento di associazione non portava la chiave del server per gli aggiornamenti: associa di nuovo il PC per riceverli.": "Der Kopplungslink enthielt den Schlüssel des Servers für Updates nicht: Koppeln Sie den PC erneut, um sie zu erhalten.",
+ "L'annuncio del server non è firmato con la sua chiave: ignorato.": "Die Ankündigung des Servers ist nicht mit seinem Schlüssel signiert: ignoriert.",
+ "È disponibile la versione %s.": "Version %s ist verfügbar.",
+ "Si aggiorna con il gestore di pacchetti del sistema.": "Sie wird vom Paketmanager des Systems aktualisiert.",
+ "Per questa installazione il server non ha un pacchetto.": "Der Server hat für diese Installation kein Paket.",
+ "Nessun aggiornamento: %s è l'ultima versione.": "Kein Update: %s ist die neueste Version.",
+ "Server non raggiungibile: %s": "Server nicht erreichbar: %s"
 }

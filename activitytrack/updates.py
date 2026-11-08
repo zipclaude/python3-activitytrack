@@ -1,96 +1,252 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """
-Newer releases on GitLab (server docs/SYNC.md §12.4, app
-domain/update/UpdateCheck.kt): the public releases of this repository,
-a stable one or, for who subscribed to the betas, a beta too. GitLab has
-no pre-releases: a version with a suffix (1.1.0-beta1) is a beta. Releases
-dated in the future do not count. Once a day; the policy may fix both
-settings (updateCheck, updateBetas).
+Updates of the PC applications (activitytrack#1, server docs/SYNC.md §12.4). The only source is the paired
+server, which relays the signed manifest in sync/head; the only signer trusted is the key whose fingerprint
+came with the pairing link (`k`), so a PC paired by an older link, or to a server that does not sign, is
+never offered anything. No upstream and no custom address here (those are the phone's).
+
+    status()     what the stored manifest says: nothing to do, a newer release, why not
+    check()      asks the server now, then status()
+    download()   the package of the release to a folder, its sha256 checked
+
+The packages are named per distribution in the manifest (docs/UPDATES.md of the app). An installation made by
+the distribution's package manager keeps the check but is never offered the download: the package manager
+updates it. The check itself is a setting (and a policy may fix it, as
+`updateCheck` and `updateBetas` do); the channels followed are always prod plus, with the beta switch, beta.
 """
 
-import json
-import ssl
-import urllib.parse
-import urllib.request
+import contextlib
+import re
+import sys
+import time
 from dataclasses import dataclass
 
-# the interfaces' repositories: each one checks its own releases
-REPOSITORY = "infraconsulting/activitytrack-desktop"
+from . import client, manifest
+from .manifest import ManifestError
+from .net import NetworkError
+from .sync import INCOMPATIBLE, REVOKED
+from .versions import compare  # noqa: F401  (the interfaces order versions with it)
+
+# Status.state
+OFF, UNPAIRED, UNTRUSTED, NONE, AVAILABLE, ERROR = "off", "unpaired", "untrusted", "none", "available", "error"
+# REVOKED, INCOMPATIBLE (sync.py): the server refused the question, because it revoked this PC or does not speak
+# this version (Status.error: the code that says which side to update)
+# the states in which nothing can be said of a newer version: a command line exits with an error
+FAILED = (UNPAIRED, UNTRUSTED, ERROR, REVOKED, INCOMPATIBLE)
 DAY_S = 24 * 3600
+
+CHECK, BETAS, ISSUED, MANIFEST, CHECKED = "updates.check", "updates.betas", "update.issued", "update.manifest", \
+    "updates.checked"
+PREFIX = "/api/v1/"
+# the distributions the project builds a .deb for: (os-release ID, VERSION_ID or VERSION_CODENAME) -> suffix
+DISTROS = {("debian", "13"): "deb13", ("debian", "trixie"): "deb13", ("debian", "14"): "deb14",
+           ("debian", "forky"): "deb14", ("ubuntu", "24.04"): "ubuntu24.04", ("ubuntu", "26.04"): "ubuntu26.04"}
+OS_RELEASE = "/etc/os-release"
 
 
 @dataclass(frozen=True)
-class Release:
-    version: str
-    url: str
-    beta: bool
+class Status:
+    state: str
+    release: object = None
+    # the package for this installation exists and no package manager is in charge of it
+    downloadable: bool = False
+    error: str = ""
 
 
-def _key(text):
-    text = text.strip()
-    if text.startswith("v"):
-        text = text[1:]
-    main, _sep, pre = text.partition("-")
+def interface():
+    """desktop, cli or tui: the interface the running process is (set_client)."""
+    name = client()["name"].lower()
+    for found in ("desktop", "cli", "tui"):
+        if found in name:
+            return found
+    return None
+
+
+def distro(path=OS_RELEASE):
+    """The suffix of this system's packages (deb13, deb14, ubuntu24.04, ubuntu26.04), or None for any other."""
+    found = {}
     try:
-        numbers = [int(x) for x in main.split(".")]
-    except ValueError:
-        return [-1, -1, -1], None
-    return (numbers + [0, 0, 0])[:3], pre or None
-
-
-def _compare_pre(a, b):
-    x, y = a.split("."), b.split(".")
-    for p, q in zip(x, y):
-        if p.isdigit() and q.isdigit():
-            c = (int(p) > int(q)) - (int(p) < int(q))
-        else:
-            c = (p > q) - (p < q)
-        if c:
-            return c
-    return (len(x) > len(y)) - (len(x) < len(y))
-
-
-def compare(a, b):
-    """"1.2.3", "1.2", "1.2.3-beta.1" (a pre-release before its release); anything else sorts first."""
-    (xn, xp), (yn, yp) = _key(a), _key(b)
-    if xn != yn:
-        return (xn > yn) - (xn < yn)
-    if xp == yp:
-        return 0
-    if xp is None:
-        return 1
-    if yp is None:
-        return -1
-    return _compare_pre(xp, yp)
-
-
-def newer(releases_json, current, betas):
-    """The newest release after [current] the user wants, or None."""
-    try:
-        data = json.loads(releases_json)
-    except ValueError:
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                key, _eq, value = line.strip().partition("=")
+                found[key] = value.strip("\"'")
+    except OSError:
         return None
-    best = None
-    for o in data if isinstance(data, list) else ():
-        if not isinstance(o, dict) or o.get("upcoming_release") or not o.get("tag_name"):
-            continue
-        version = o["tag_name"].removeprefix("v")
-        beta = "-" in version
-        if beta and not betas:
-            continue
-        links = o.get("_links")
-        r = Release(version, (links.get("self") if isinstance(links, dict) else None) or "", beta)
-        if compare(r.version, current) > 0 and (best is None or compare(r.version, best.version) > 0):
-            best = r
-    return best
+    return (DISTROS.get((found.get("ID"), found.get("VERSION_ID", "")))
+            or DISTROS.get((found.get("ID"), found.get("VERSION_CODENAME", ""))))
 
 
-def fetch(repository=REPOSITORY, timeout=20):
-    """The releases' JSON of [repository] from GitLab (no account needed)."""
-    from . import client
-    me = client()
-    url = f"https://gitlab.com/api/v4/projects/{urllib.parse.quote(repository, safe='')}/releases?per_page=20"
-    req = urllib.request.Request(url, headers={"Accept": "application/json",
-                                               "User-Agent": f"{me['name']}/{me['version']}"})
-    with urllib.request.urlopen(req, timeout=timeout, context=ssl.create_default_context()) as r:
-        return r.read().decode("utf-8", "replace")
+def component():
+    """The package this installation takes, as the manifest names it: <desktop|cli|tui>-<deb13|deb14|ubuntu24.04|
+    ubuntu26.04> for the distribution's package, -windows on Windows, -tar for any other installation. None
+    when the interface is unknown or the distribution has no package of ours (the version is still shown)."""
+    which = interface()
+    if which is None:
+        return None
+    if sys.platform == "win32":
+        return f"{which}-windows"
+    if manifest.from_package_manager():
+        suffix = distro()
+        return f"{which}-{suffix}" if suffix else None
+    return f"{which}-tar"
+
+
+class Updates:
+    def __init__(self, session, runner, policy):
+        """[policy]: a function giving the policy in force (it changes at every sync)."""
+        self.session, self.runner, self.policy = session, runner, policy
+
+    @property
+    def version(self):
+        return client()["version"]
+
+    @property
+    def store(self):
+        return self.session.store
+
+    # ---- the settings ----
+
+    def settings(self):
+        """(check, betas): the user's choice, the policy's when it fixes them; a pre-release follows the betas."""
+        p = self.policy()
+        check = p.setting("updateCheck", True)
+        betas = p.setting("updateBetas", "-" in self.version)
+        if not p.setting_fixed("updateCheck"):
+            check = bool(self.store.get_state(CHECK, check))
+        if not p.setting_fixed("updateBetas"):
+            betas = bool(self.store.get_state(BETAS, betas))
+        return check, betas
+
+    def set_check(self, on):
+        self.store.set_state(CHECK, bool(on))
+
+    def set_betas(self, on):
+        self.store.set_state(BETAS, bool(on))
+
+    @property
+    def channels(self):
+        return ("prod", "beta") if self.settings()[1] else ("prod",)
+
+    @property
+    def checked(self):
+        """Epoch seconds of the last time the server was asked, or 0."""
+        return self.store.get_state(CHECKED, 0)
+
+    def due(self, now):
+        """True when the daily check is on and a day passed since the last one."""
+        return self.settings()[0] and now - self.checked >= DAY_S
+
+    # ---- what the server said ----
+
+    def channels_for(self, requested=None):
+        """The channels to follow: the setting's, or [requested] (one name or several) plus prod for
+        this run only; a policy that fixes updateBetas off keeps the beta out whatever is asked."""
+        if not requested:
+            return self.channels
+        asked = {requested} if isinstance(requested, str) else set(requested)
+        p = self.policy()
+        if p.setting_fixed("updateBetas") and not p.setting("updateBetas", False):
+            asked.discard("beta")
+        return ("prod", *sorted(asked - {"prod"}))
+
+    def status(self, channels=None):
+        """The newest release after this version, from the manifest stored at the last sync;
+        [channels]: for this run instead of the setting (see channels_for)."""
+        account = self.session.account
+        if account is None:
+            return Status(UNPAIRED)
+        if not self.settings()[0]:
+            return Status(OFF)
+        if not account.update_key:
+            return Status(UNTRUSTED, error="no key")
+        text = self.store.get_state(MANIFEST)
+        if not text:
+            return Status(NONE)
+        want = component()
+        try:
+            found, issued = self._find(text, account.update_key, want, channels)
+            if found is None and want is not None:
+                # a newer release without a package for this installation: said, not offered
+                found, issued = self._find(text, account.update_key, None, channels)
+                want = None
+        except ManifestError as e:
+            return Status(UNTRUSTED, error=str(e))
+        self.store.set_state(ISSUED, issued)
+        if found is None:
+            return Status(NONE)
+        return Status(AVAILABLE, found, downloadable=want is not None and not manifest.from_package_manager())
+
+    def _find(self, text, key, want, channels=None):
+        return manifest.check(text, [key], self.version, self.channels_for(channels), want,
+                              self.store.get_state(ISSUED), server=True)
+
+    def check(self, now=None, channels=None):
+        """Asks the server now; the status after it (an unreachable server is an ERROR)."""
+        if self.session.account is None:
+            return Status(UNPAIRED)
+        failed = self.runner.refresh_update()
+        if failed == REVOKED:
+            return Status(REVOKED)
+        if failed.partition(":")[0] == INCOMPATIBLE:
+            return Status(INCOMPATIBLE, error=failed.partition(":")[2])
+        if failed:
+            return Status(ERROR, error=failed)
+        self.store.set_state(CHECKED, now if now is not None else time.time())
+        return self.status(channels)
+
+    def known_channels(self):
+        """The channels the stored manifest has releases in (for a choice), prod first."""
+        account = self.session.account
+        text = self.store.get_state(MANIFEST)
+        if account is None or not account.update_key or not text:
+            return ["prod"]
+        try:
+            found = {r.channel for r in manifest.releases(manifest.verify(text, [account.update_key]), server=True)}
+        except ManifestError:
+            return ["prod"]
+        return ["prod"] + sorted(found - {"prod"})
+
+    # ---- the package ----
+
+    def download(self, release, folder=None):
+        """The package of [release] for this installation, in [folder] (default: the data folder's
+        `updates`), its sha256 checked; the path. ManifestError when it does not match or there is none."""
+        want = component()
+        package = release.package(want) if want else None
+        if package is None or manifest.from_package_manager():
+            raise ManifestError("nothing to download for this installation")
+        http = self.session.http()
+        if http is None:
+            raise ManifestError("not paired")
+        folder = folder or self.session.folder / "updates"
+        folder.mkdir(parents=True, exist_ok=True)
+        version = re.sub(r"[^A-Za-z0-9.+~_-]", "_", release.version)
+        dest = folder / f"activitytrack-{package.component}-{version}{_extension(package.component)}"
+
+        # a file of the server goes through its authorisation and is streamed to the .part file; a package
+        # the server's manifest has at another address (https, the server not mirroring) is fetched there, with
+        # no token: the manifest, signed by the server's pinned key, is what vouches for the address
+        opener = self._server_file(http) if package.url.startswith(PREFIX) else None
+        return manifest.download(package, dest, opener=opener)
+
+    @staticmethod
+    def _server_file(http):
+        @contextlib.contextmanager
+        def opener(url, timeout):
+            try:
+                with http.stream(url[len(PREFIX):]) as r:
+                    if r.status != 200:
+                        raise ManifestError(f"HTTP {r.status}")
+                    yield r
+            except NetworkError as e:
+                raise ManifestError(str(e)) from e
+        return opener
+
+
+def _extension(name):
+    kind = name.rsplit("-", 1)[-1]
+    if kind == "tar":
+        return ".tar.gz"
+    if kind == "windows":
+        return ".exe" if name.startswith("desktop-") else ".zip"
+    return ".deb"

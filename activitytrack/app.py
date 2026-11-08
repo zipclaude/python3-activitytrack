@@ -14,6 +14,7 @@ from .i18n import _
 from .policy import stored
 from .session import Session
 from .sync import Runner
+from .updates import Updates
 from .todos import Todos, state as todo_state
 from .work import ACTIVE, Work, WorkError, local_zone
 
@@ -32,6 +33,7 @@ class App:
         self.work = Work(self.session.store, stored(self.session.store), zone=local_zone())
         self.todos = Todos(self.work)
         self.runner = Runner(self.session)
+        self.updates = Updates(self.session, self.runner, lambda: self.work.policy)
 
     @property
     def store(self):

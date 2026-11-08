@@ -81,7 +81,8 @@ class UpdatesTest(unittest.TestCase):
 
     def test_the_version_scheme_of_the_workflow(self):
         # a security patch has a fourth number; betas are -beta-N, numerically; a beta precedes its release
-        ordered = ["0.9.9", "0.9.9.1", "0.9.9.2", "0.9.10-beta-1", "0.9.10-beta-2", "0.9.10-beta-10", "0.9.10", "0.9.10.1", "0.10.0"]
+        ordered = ["0.9.9", "0.9.9.1", "0.9.9.2", "0.9.10-beta-1", "0.9.10-beta-2", "0.9.10-beta-10", "0.9.10",
+                   "0.9.10.1", "0.10.0"]
         self.assertEqual(ordered, sorted(reversed(ordered), key=functools.cmp_to_key(updates.compare)))
         self.assertEqual(0, updates.compare("v0.9.9.0", "0.9.9"))
         self.assertEqual(0, updates.compare("0.9.10-beta-1", "0.9.10-beta.1"))

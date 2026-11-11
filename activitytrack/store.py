@@ -10,11 +10,17 @@ The local copy (docs/DESIGN.md §5.1), SQLite:
 - `state`: cursor, clock offset, last sync.
 
 What the interface reads is `record` overlaid with `pending`.
+
+A store written before the activity model 1.0 (wire schema 3, app docs/ACTIVITY-MODEL.md §6) is migrated
+when it is opened (`_migrate_model`, state key "model"): its to-dos, absences and entries become
+activities by migration.py, the local changes not yet pushed come along, and the next sync is a full
+realignment (the cursor goes back to 0: the server's migrated records win).
 """
 
 import json
 import sqlite3
 import threading
+import time
 from contextlib import contextmanager
 
 SCHEMA = """
@@ -38,6 +44,11 @@ CREATE TABLE IF NOT EXISTS sync_error (
 CREATE TABLE IF NOT EXISTS state (key TEXT PRIMARY KEY, value TEXT);
 """
 
+# the data model the store holds: 1 is the activity model (wire schema 3); none before
+MODEL = 1
+# records that hang from an entry, after it in the pending changes
+_ENTRY_CHILDREN = ("segment", "externalRef", "attachment", "expense", "entryMaterial")
+
 
 class Store:
     """One connection per thread on the same file (WAL): the sync writes while the interface reads."""
@@ -54,9 +65,79 @@ class Store:
         try:
             # executescript commits by itself: not inside transaction()
             self.db.executescript(SCHEMA)
+            self._migrate_model()
         except BaseException:
             self.close()
             raise
+
+    def _migrate_model(self):
+        """A store of the schemas 1 and 2 becomes one of the schema 3 (see the module's text)."""
+        with self.transaction() as db:
+            if self.get_state("model", 0) >= MODEL:
+                return
+            used = db.execute("SELECT 1 FROM record UNION ALL SELECT 1 FROM pending LIMIT 1").fetchone()
+            if used is not None:
+                self._migrate_activities(db)
+            self.set_state("model", MODEL)
+
+    def _migrate_activities(self, db):
+        from . import migration
+        from .wire import LEGACY_TYPES
+        from .work import local_zone
+        now = int(time.time() * 1000)
+        marks = ",".join("?" * len(migration.READS))
+        shadow = {t: {} for t in migration.READS}
+        for r in db.execute(f"SELECT type, uid, fields FROM record WHERE deleted = 0 AND type IN ({marks})",
+                            migration.READS):
+            shadow[r["type"]][r["uid"]] = json.loads(r["fields"])
+        pending = db.execute("SELECT * FROM pending ORDER BY seq").fetchall()
+        # what the interface saw: the shadow with the changes not yet pushed over it
+        merged = {t: {u: dict(f) for u, f in found.items()} for t, found in shadow.items()}
+        for p in pending:
+            if p["type"] not in merged:
+                continue
+            if p["op"] == "delete":
+                merged[p["type"]].pop(p["uid"], None)
+            else:
+                merged[p["type"]].setdefault(p["uid"], {}).update(json.loads(p["fields"]))
+        zone = local_zone()
+        before = migration.migrate_records(shadow, zone)
+        after = migration.migrate_records(merged, zone)
+        # the shadow: what the server holds, migrated
+        for type_ in LEGACY_TYPES:
+            db.execute("DELETE FROM record WHERE type = ?", (type_,))
+            db.execute("DELETE FROM sync_error WHERE type = ?", (type_,))
+        for type_ in migration.WRITES:
+            for uid, fields in before[type_].items():
+                old = db.execute("SELECT rev, central FROM record WHERE type = ? AND uid = ?", (type_, uid)).fetchone()
+                db.execute(
+                    "INSERT OR REPLACE INTO record (type, uid, rev, deleted, central, fields) "
+                    "VALUES (?, ?, ?, 0, ?, ?)",
+                    (type_, uid, old["rev"] if old else 0, old["central"] if old else 0, json.dumps(fields)),
+                )
+        # the changes not yet pushed: what turns the migrated shadow into the migrated view
+        db.execute("DELETE FROM pending")
+        migrated = migration.WRITES + LEGACY_TYPES
+        kept = [p for p in pending if p["type"] not in migrated]
+        entries = []
+        for type_ in migration.WRITES:
+            for uid, fields in after[type_].items():
+                base = before[type_].get(uid)
+                changed = fields if base is None else {k: v for k, v in fields.items() if base.get(k) != v}
+                if changed:
+                    entries.append((type_, uid, "upsert", changed, now))
+            entries += [(type_, uid, "delete", {}, now) for uid in before[type_] if uid not in after[type_]]
+        rows = [p for p in kept if p["type"] not in _ENTRY_CHILDREN]
+        rows = [(p["type"], p["uid"], p["op"], json.loads(p["fields"]), json.loads(p["times"]), p["time"])
+                for p in rows]
+        rows += [(t, u, op, f, {k: at for k in f}, at if op == "delete" else 0) for t, u, op, f, at in entries]
+        rows += [(p["type"], p["uid"], p["op"], json.loads(p["fields"]), json.loads(p["times"]), p["time"])
+                 for p in kept if p["type"] in _ENTRY_CHILDREN]
+        for type_, uid, op, fields, times, at in rows:
+            db.execute("INSERT INTO pending (type, uid, op, fields, times, time) VALUES (?, ?, ?, ?, ?, ?)",
+                       (type_, uid, op, json.dumps(fields), json.dumps(times), at))
+        # the first sync after the migration is a full realignment: the server's version wins
+        self.set_state("cursor", 0)
 
     @property
     def db(self):
@@ -279,6 +360,8 @@ class Store:
         with self.transaction() as db:
             for table in ("record", "pending", "sync_error", "state"):
                 db.execute(f"DELETE FROM {table}")
+            # what comes next is of the model the library speaks
+            self.set_state("model", MODEL)
 
 
 def _merged(type_, uid, rec, pend):

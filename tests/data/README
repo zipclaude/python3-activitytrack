@@ -1,0 +1,6 @@
+Shared cases of the activity model 1.0, copied verbatim from the app repository (activitytrack,
+branch feature/activity-1.0, commit 2c96bec); every implementation runs them. Refresh by copying the
+files again; do not edit them here.
+
+- activity-states.json: docs/samples/activity-states.json, the displayed state (docs/ACTIVITY-MODEL.md 2.2-2.4);
+- activity-migration.json: docs/samples/activity-migration.json, the data migration of section 6.

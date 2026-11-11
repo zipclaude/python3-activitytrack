@@ -19,7 +19,9 @@ One application, whatever the interface: they share the data folder
 | `sync`, `net`, `wire` | the sync as a paired device (server `docs/SYNC.md`), HTTPS with the server's key pinned |
 | `pairing`, `session`, `vault`, `paths` | the pairing link, who the PC is paired with, the token in the system's keyring, the data folder |
 | `policy` | the user's policy, the keys the PC uses |
-| `work`, `todos` | the rules of activities and to-dos, as the app's |
+| `model`, `work` | the activity model 1.0 (to-do, running, closed, absence): the displayed state, the plan, the rounding of instants, and the commands (start, switch, resume, stop, tick, reopen, delete, absences), as the app's (`docs/ACTIVITY-MODEL.md`) |
+| `migration` | the migration of a store of the schemas 1 and 2 to the activity model (reference of the app's repository, run when the store is opened) |
+| `todos` | the to-do list of the interfaces over the activities (a compatibility layer until the interfaces use `work`) |
 | `reminders` | the reminders' planner, as the app's |
 | `updates`, `versions` | the updates of the PC from the paired server (its signed manifest, the pinned key of the pairing link), the order of versions |
 | `manifest` | the signed update manifest: JWS check against pinned signers, channels, sha256 of the package |

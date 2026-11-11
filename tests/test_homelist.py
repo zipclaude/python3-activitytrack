@@ -5,12 +5,11 @@ from datetime import date, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from activitytrack.homelist import DONE, IGNORED, MISSING, TODO, home, sections, startable
+from activitytrack.model import display, is_late, moment, plan_bounds, postponed
 from activitytrack.policy import Policy
 from activitytrack.store import Store
-from activitytrack.todos import (
-    DONE, IGNORED, MISSING, TODO, Todos, moment, overdue, plan_bounds, postponed, sections, state,
-)
-from activitytrack.work import STOP, StartRequest, Work, WorkError
+from activitytrack.work import StartRequest, Work, WorkError
 
 ROME = ZoneInfo("Europe/Rome")
 
@@ -28,29 +27,30 @@ class PlanTest(unittest.TestCase):
         self.assertIsNone(plan_bounds({}, ROME))
         self.assertEqual(moment({"dueDate": "2026-11-05", "dueTimeMin": 600}, ROME), at(2026, 11, 5, 10))
 
-    def test_overdue_and_state(self):
+    def test_late_and_displayed_state(self):
         block = {"planDate": "2026-11-02", "planStartMin": 900, "durationMin": 30}
         block, whole, due = [dict(x, status="TODO") for x in (block, {"planDate": "2026-11-02"},
                                                              {"dueDate": "2026-11-01"})]
-        self.assertFalse(overdue(block, at(2026, 11, 2, 15, 30), ROME))
-        self.assertTrue(overdue(block, at(2026, 11, 2, 15, 31), ROME))
+        self.assertFalse(is_late(block, [], at(2026, 11, 2, 15, 30), ROME))
+        self.assertTrue(is_late(block, [], at(2026, 11, 2, 15, 31), ROME))
         # a whole day is over from the next day
-        self.assertFalse(overdue(whole, at(2026, 11, 2, 23, 59), ROME))
-        self.assertTrue(overdue(whole, at(2026, 11, 3), ROME))
-        self.assertTrue(overdue(due, at(2026, 11, 2, 0, 1), ROME))
-        # never once closed or deleted
-        self.assertFalse(overdue(dict(due, status="CLOSED"), at(2026, 11, 2, 0, 1), ROME))
-        self.assertFalse(overdue(dict(due, deletedUtcMs=1), at(2026, 11, 2, 0, 1), ROME))
+        self.assertFalse(is_late(whole, [], at(2026, 11, 2, 23, 59), ROME))
+        self.assertTrue(is_late(whole, [], at(2026, 11, 3), ROME))
+        self.assertTrue(is_late(due, [], at(2026, 11, 2, 0, 1), ROME))
+
+        def shown(a, now, segs=()):
+            return display(a, segs, now, ROME)[0]
+
         todo = {"status": "TODO"}
-        self.assertEqual(state({"status": "CLOSED", "planDate": "2026-01-01"}, at(2026, 11, 2), ROME), "done")
-        self.assertEqual(state(dict(todo, deletedUtcMs=5), at(2026, 11, 2), ROME), "ignored")
-        self.assertEqual(state(dict(todo, planDate="2026-12-01"), at(2026, 11, 2), ROME), "planned")
-        self.assertEqual(state(dict(todo, dueDate="2026-12-01"), at(2026, 11, 2), ROME), "planned")
-        self.assertEqual(state(dict(todo, planDate="2026-01-01"), at(2026, 11, 2), ROME), "overdue")
-        self.assertEqual(state(todo, at(2026, 11, 2), ROME), "open")
+        self.assertEqual(shown({"status": "CLOSED", "planDate": "2026-01-01"}, at(2026, 11, 2)), "DONE")
+        self.assertEqual(shown(dict(todo, deletedUtcMs=5), at(2026, 11, 2)), "DELETED")
+        self.assertEqual(shown(dict(todo, planDate="2026-12-01"), at(2026, 11, 2)), "PLANNED")
+        self.assertEqual(shown(dict(todo, dueDate="2026-12-01"), at(2026, 11, 2)), "PLANNED")
+        self.assertEqual(shown(dict(todo, planDate="2026-01-01"), at(2026, 11, 2)), "LATE")
+        self.assertEqual(shown(todo, at(2026, 11, 2)), "TODO")
         # planned segments rule over the plan (2.3)
         ahead = [{"planned": True, "startUtcMs": 1, "endUtcMs": at(2026, 12, 1).timestamp() * 1000}]
-        self.assertEqual(state(dict(todo, planDate="2026-01-01"), at(2026, 11, 2), ROME, ahead), "planned")
+        self.assertEqual(shown(dict(todo, planDate="2026-01-01"), at(2026, 11, 2), ahead), "PLANNED")
 
     def test_postponed(self):
         block = {"planDate": "2026-11-02", "planStartMin": 900, "durationMin": 30}
@@ -104,13 +104,12 @@ class SectionsTest(unittest.TestCase):
         self.assertEqual(out, {"today": ["e2"]})
 
 
-class TodosTest(unittest.TestCase):
+class HomeTest(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.TemporaryDirectory()
         self.store = Store(Path(self.dir.name) / "d.sqlite3")
         self.now = int(at(2026, 11, 2, 10).timestamp() * 1000)
         self.work = Work(self.store, clock=lambda: self.now, zone="Europe/Rome")
-        self.todos = Todos(self.work)
         self.store.pulled({"type": "client", "uid": "lib", "rev": 1,
                            "fields": {"name": "Biblioteca", "companyUid": None, "archived": False}})
 
@@ -122,91 +121,82 @@ class TodosTest(unittest.TestCase):
         return self.store.get("entry", uid)
 
     def test_new_and_changed(self):
-        uid = self.todos.save(None, "  Rinnovo certificati ", client="biblioteca", refs="INC1\n\n https://x/1 ",
-                              plan_date=date(2026, 11, 2), plan_min=900, duration_min=30, priority=2)
+        uid = self.work.save_todo(None, "  Rinnovo certificati ", client="biblioteca", refs="INC1\n\n https://x/1 ",
+                                  plan_date=date(2026, 11, 2), plan_min=900, duration_min=30, priority=2)
         t = self.get(uid)
         self.assertEqual((t["activity"], t["clientUid"], t["planDate"], t["planStartMin"], t["status"], t["kind"]),
                          ("Rinnovo certificati", "lib", "2026-11-02", 900, "TODO", "ACTIVITY"))
         refs = sorted((r["kind"], r["value"]) for r in self.store.all("externalRef") if r["entryUid"] == uid)
         self.assertEqual(refs, [("TICKET", "INC1"), ("URL", "https://x/1")])
-        self.todos.save(uid, "Rinnovo", client="lib")
+        self.work.save_todo(uid, "Rinnovo", client="lib", refs="")
         t = self.get(uid)
         self.assertEqual((t["activity"], t["planDate"], t["priority"]), ("Rinnovo", None, 0))
         self.assertEqual([r for r in self.store.all("externalRef") if r["entryUid"] == uid], [])
-        for kw, code in ((dict(title=""), "title_required"), (dict(plan_min=600), "plan_day_required"),
+        for kw, code in ((dict(activity=""), "title_required"), (dict(plan_min=600), "plan_day_required"),
                          (dict(plan_date=date(2026, 11, 2), duration_min=30), "plan_time_required"),
                          (dict(priority=7), "invalid_priority")):
-            kw.setdefault("title", "x")
+            kw.setdefault("activity", "x")
             with self.assertRaises(WorkError) as e:
-                self.todos.save(None, **kw)
+                self.work.save_todo(None, **kw)
             self.assertEqual(e.exception.code, code)
 
     def test_states(self):
-        uid = self.todos.save(None, "x")
-        self.todos.set_done(uid)
+        uid = self.work.save_todo(None, "x")
+        self.work.tick(uid)
         t = self.get(uid)
         self.assertEqual((t["status"], t["closedUtcMs"]), ("CLOSED", self.now))
-        self.assertEqual([x["uid"] for x in self.todos.all()], [uid])
-        self.todos.set_done(uid, False)
+        self.work.untick(uid)
         self.assertEqual(self.get(uid)["status"], "TODO")
-        self.todos.set_ignored(uid)
+        self.work.delete(uid)
         t = self.get(uid)
         self.assertEqual((t["status"], t["deletedUtcMs"]), ("TODO", self.now))
         self.assertEqual(self.work.todo_list(), [])
-        self.assertEqual([x["uid"] for x in self.todos.all()], [uid])
-        self.todos.reopen(uid)
+        self.work.restore(uid)
         t = self.get(uid)
         self.assertEqual((t["status"], t["deletedUtcMs"], t["closedUtcMs"]), ("TODO", None, None))
-        self.todos.set_done(uid)
-        self.todos.reopen(uid)
-        self.assertEqual(self.get(uid)["status"], "TODO")
 
     def test_postpone_and_policy(self):
-        uid = self.todos.save(None, "x", plan_date=date(2026, 11, 2), plan_min=900)
-        self.todos.postpone(uid, now=at(2026, 11, 2, 10))
+        uid = self.work.save_todo(None, "x", plan_date=date(2026, 11, 2), plan_min=900)
+        self.work.postpone(uid, now=at(2026, 11, 2, 10))
         self.assertEqual(self.get(uid)["planStartMin"], 915)
         self.work.policy = Policy({"format": "activitytrack-policy", "schema": 1,
                                    "features": {"ignoreTodos": False, "deleteTodos": False, "planning": False},
                                    "settings": {"planSnoozeMin": 60}})
-        for f in (lambda: self.todos.set_ignored(uid), lambda: self.todos.delete(uid),
-                  lambda: self.todos.postpone(uid)):
+        for f in (lambda: self.work.delete(uid), lambda: self.work.postpone(uid)):
             with self.assertRaises(WorkError):
                 f()
         # an existing plan may stay when planning is off
-        self.todos.save(uid, "y", plan_date=date(2026, 11, 2), plan_min=915)
+        self.work.save_todo(uid, "y", plan_date=date(2026, 11, 2), plan_min=915)
 
-    def test_delete_is_the_bin_also_for_an_imported_one(self):
-        uid = self.todos.save(None, "x")
-        self.todos.delete(uid)
-        self.assertIsNotNone(self.get(uid)["deletedUtcMs"])
+    def test_an_imported_one_goes_to_the_bin_too(self):
         self.store.pulled({"type": "entry", "uid": "imp", "rev": 2, "fields": {
             "kind": "ACTIVITY", "status": "TODO", "activity": "Ticket", "externalKey": "T-1"}})
-        self.todos.delete("imp")
+        self.work.delete("imp")
         self.assertEqual(self.get("imp")["deletedUtcMs"], self.now)
 
-    def test_an_absence_is_not_a_todo(self):
+    def test_an_absence_is_not_in_the_list(self):
         self.store.pulled({"type": "entry", "uid": "ab", "rev": 2, "fields": {
             "kind": "ABSENCE", "status": "CLOSED", "absenceKind": "HOLIDAY"}})
-        self.assertEqual(self.todos.all(), [])
-        with self.assertRaises(WorkError):
-            self.todos.todo("ab")
+        self.assertEqual(home(self.work, (TODO, MISSING, DONE, IGNORED), 0, now=at(2026, 11, 2, 10)), [])
 
     def test_home_and_startable(self):
-        today = self.todos.save(None, "Oggi", client="lib", plan_date=date(2026, 11, 2), plan_min=900)
-        self.todos.save(None, "Senza data")
+        today = self.work.save_todo(None, "Oggi", client="lib", plan_date=date(2026, 11, 2), plan_min=900)
+        self.work.save_todo(None, "Senza data")
         e = self.work.start(StartRequest(client="lib", activity="Rete"))
-        self.work.command(e, STOP)
+        self.work.stop(e)
         no_client = self.work.start(StartRequest(client="lib", activity="Cavi"))
-        self.work.command(no_client, STOP)
+        self.work.stop(no_client)
         self.work.edit(no_client, client="")
-        home = dict(self.todos.home(now=at(2026, 11, 2, 10)))
-        self.assertEqual([i[1]["uid"] for i in home["today"]], [today])
-        self.assertIn("no_date", home)
+        now = at(2026, 11, 2, 10)
+        listed = dict(home(self.work, now=now))
+        self.assertEqual([i[1]["uid"] for i in listed["today"]], [today])
+        self.assertEqual(listed["today"][0][2], "PLANNED")
+        self.assertIn("no_date", listed)
         # a closed activity without what it needs is "missing"; a complete one is done
-        self.assertEqual([i[1]["uid"] for i in home["missing"]], [no_client])
-        done = dict(self.todos.home((DONE,), now=at(2026, 11, 2, 10)))
+        self.assertEqual([i[1]["uid"] for i in listed["missing"]], [no_client])
+        done = dict(home(self.work, (DONE,), now=now))
         self.assertEqual([i[1]["uid"] for i in done["today"]], [e])
-        self.assertEqual([t["uid"] for t in self.todos.startable(now=at(2026, 11, 2, 10))], [today])
+        self.assertEqual([t["uid"] for t in startable(self.work, now=now)], [today])
         # started: shown by its activity, not in the list
         self.work.start(StartRequest(todo=today, client="lib"))
-        self.assertNotIn("today", dict(self.todos.home(now=at(2026, 11, 2, 10))))
+        self.assertNotIn("today", dict(home(self.work, now=now)))

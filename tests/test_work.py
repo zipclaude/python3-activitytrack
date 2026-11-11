@@ -10,7 +10,7 @@ from activitytrack import model
 from activitytrack.policy import Policy
 from activitytrack.store import Store
 from activitytrack.work import (
-    ABSENCE, CLOSED, PAUSE, REOPEN, RUNNING, STOP, SUSPEND, TICK, TODO, TRAVEL, WORK, StartRequest, Work,
+    ABSENCE, CLOSED, PAUSE, RUNNING, STOP, SUSPEND, TICK, TODO, TRAVEL, WORK, StartRequest, Work,
     WorkError, ref_kind, transition,
 )
 
@@ -253,16 +253,14 @@ class WorkTest(unittest.TestCase):
         self.work.tick(t)
         self.assertEqual(self.kinds(t, planned=True), [])
 
-    def test_stop_without_description_is_incomplete_not_a_status(self):
+    def test_stop_without_client_or_work_is_displayed_incomplete(self):
         a = self.start(activity="")
-        self.assertEqual(self.work.command(a, STOP), CLOSED)
-        with self.assertRaises(WorkError) as e:
-            self.work.complete(a)
-        self.assertEqual(e.exception.code, "details_missing")
-        self.assertFalse(self.work.close_if_complete(a))
-        self.work.edit(a, activity="Cablaggio")
-        self.work.complete(a)
-        self.assertTrue(self.work.close_if_complete(a))
+        self.assertEqual(self.work.stop(a), CLOSED)
+        self.assertEqual(self.work.display(self.entry(a))[0], "DONE")
+        self.work.edit(a, client="")
+        self.assertEqual(self.work.display(self.entry(a))[0], "INCOMPLETE")
+        self.work.edit(a, client="lib")
+        self.assertEqual(self.work.display(self.entry(a))[0], "DONE")
         b = self.start(todo=self.todo(client="lib"))
         self.assertEqual(self.status(b), RUNNING)
 
@@ -329,11 +327,11 @@ class WorkTest(unittest.TestCase):
     def test_a_backdated_command_is_clamped(self):
         uid = self.start()
         self.now += 30 * MIN
-        self.work.command(uid, PAUSE, at=self.now - 100 * MIN)
+        self.work.switch(uid, PAUSE, at=self.now - 100 * MIN)
         pause = self.work.open_segment(uid)
         self.assertEqual(pause["startUtcMs"], self.now - 30 * MIN)
         with self.assertRaises(WorkError):
-            self.work.command(uid, WORK, at=self.now - 40 * MIN, exact=True)
+            self.work.switch(uid, WORK, at=self.now - 40 * MIN, exact=True)
 
     def test_times_and_the_review_mark(self):
         uid = self.start()
@@ -378,9 +376,9 @@ class WorkTest(unittest.TestCase):
         self.work.resume(a, WORK)
         self.assertEqual((self.work.open_segment(a) is not None, self.work.open_segment(b) is not None),
                          (True, False))
-        self.work.command(a, PAUSE)
+        self.work.switch(a, PAUSE)
         self.now += 10 * MIN
-        self.work.command(b, TRAVEL)
+        self.work.resume(b, TRAVEL)
         self.assertEqual(self.entry(b)["mode"], TRAVEL)
         # a paused activity is suspended, not stopped, like a working one
         self.assertEqual((self.status(a), self.entry(a)["mode"]), (RUNNING, None))
@@ -398,34 +396,60 @@ class WorkTest(unittest.TestCase):
         self.assertEqual(self.work.segments(a)[-1]["endUtcMs"], self.now)
         self.assertEqual(self.entry(b)["mode"], WORK)
 
-    def test_the_legacy_command(self):
+    def test_perform_names_the_commands(self):
         t = self.todo(client="lib")
-        self.assertEqual(self.work.command(t, WORK), RUNNING)
+        self.work.perform(t, "start", WORK)
         self.now += MIN
-        self.assertEqual(self.work.command(t, PAUSE), RUNNING)
+        self.work.perform(t, "switch", PAUSE)
         self.now += MIN
-        self.assertEqual(self.work.command(t, STOP), CLOSED)
+        self.work.perform(t, "stop")
         self.now += MIN
-        self.assertEqual(self.work.command(t, REOPEN), RUNNING)
-        self.assertEqual(self.entry(t)["mode"], WORK)
+        self.work.perform(t, "reopen", WORK)
+        self.assertEqual((self.status(t), self.entry(t)["mode"]), (RUNNING, WORK))
         with self.assertRaises(WorkError):
-            self.work.command(t, "NOPE")
+            self.work.perform(t, "NOPE")
 
 
-class LegacyNamesTest(unittest.TestCase):
-    """The interfaces of before 1.0 still import these (TODO(activity-1.0-ifaces))."""
+class ActionsTest(unittest.TestCase):
+    """texts.entry_actions: the buttons a state allows (§3, §8), never "Sospendi"."""
 
-    def test_importable(self):
-        from activitytrack import texts, todos, work
-        for name in ("ACTIVE", "SUSPENDED", "TO_COMPLETE", "SUSPEND", "STOP", "REOPEN", "CLOSED", "WORK", "TRAVEL",
-                     "PAUSE", "StartRequest", "Work", "WorkError", "local_zone"):
-            self.assertTrue(hasattr(work, name), name)
-        for name in ("SHOWS", "DEFAULT_SHOW", "WINDOWS", "Todos", "sections", "DONE", "IGNORED", "TODO", "MISSING"):
-            self.assertTrue(hasattr(todos, name), name)
-        for name in ("KINDS", "FIELDS", "TODO_STATES", "state_label", "entry_commands", "todo_when", "hm", "clock",
-                     "error_text", "field_label"):
-            self.assertTrue(hasattr(texts, name), name)
-        self.assertTrue(Policy().todos_only is False)
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.store = Store(Path(self.dir.name) / "d.sqlite3")
+        self.now = at(10, 8)
+        self.work = Work(self.store, clock=lambda: self.now, zone="Europe/Rome")
+        self.store.write("client", "lib", {"name": "L", "archived": False}, 1)
+
+    def tearDown(self):
+        self.store.close()
+        self.dir.cleanup()
+
+    def verbs(self, uid):
+        from activitytrack.texts import entry_actions
+        return [(a.verb, a.kind) for a in entry_actions(self.work, self.work.entry(uid))]
+
+    def test_by_state(self):
+        t = self.work.save_todo(None, "x", client="lib")
+        self.assertEqual(self.verbs(t), [("start", WORK), ("start", TRAVEL), ("tick", None), ("delete", None)])
+        self.work.start(StartRequest(todo=t))
+        self.assertEqual(self.verbs(t), [("switch", PAUSE), ("travel_from_work", TRAVEL), ("stop", None),
+                                         ("delete", None)])
+        self.now += MIN
+        self.work.switch(t, PAUSE)
+        self.assertEqual(self.verbs(t)[:3], [("switch", WORK), ("switch", TRAVEL), ("stop", None)])
+        self.now += MIN
+        self.work.suspend(t)
+        self.assertEqual(self.verbs(t)[:3], [("resume", WORK), ("resume", TRAVEL), ("stop", None)])
+        self.work.stop(t)
+        self.assertEqual(self.verbs(t), [("reopen", WORK), ("delete", None)])
+        self.work.delete(t)
+        self.assertEqual(self.verbs(t), [("restore", None)])
+        self.assertNotIn("suspend", [v for v, _k in self.verbs(t)])
+
+    def test_a_ticked_task_goes_back_to_todo(self):
+        t = self.work.save_todo(None, "x")
+        self.work.tick(t)
+        self.assertEqual(self.verbs(t)[0], ("untick", None))
 
 
 class RoundingTest(unittest.TestCase):

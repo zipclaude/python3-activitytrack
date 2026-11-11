@@ -7,8 +7,8 @@ see it as any other device's work.
 
 An activity is TODO, RUNNING (with at most one open segment, its `mode`), or CLOSED; an absence is
 CLOSED with ABSENCE segments; any of them may be deleted (in the bin) and restored. The commands are
-start / start_todo, switch, resume, suspend, stop, tick, untick, reopen, delete, restore; pure rules
-(displayed state, plan, rounding) are in model.py.
+start / start_todo, switch, resume, suspend, stop, tick, untick, reopen, delete, restore (perform names them);
+pure rules (displayed state, plan, rounding) are in model.py.
 """
 
 import functools
@@ -26,15 +26,10 @@ from .policy import Policy
 from .sync import now_ms
 
 # commands besides the kind to be in (WORK, TRAVEL, PAUSE)
-SUSPEND, STOP, REOPEN, TICK = "SUSPEND", "STOP", "REOPEN", "TICK"
+SUSPEND, STOP, TICK = "SUSPEND", "STOP", "TICK"
 # segments recorded as they happen, or typed afterwards
 TRACKED, MANUAL = "TRACKED", "MANUAL"
 MAX_DURATION_MIN = 24 * 60
-
-# TODO(activity-1.0-ifaces): the statuses of the schemas before 3, for the interfaces not yet updated.
-# Nothing stores them any more: ACTIVE is RUNNING with an open segment, SUSPENDED RUNNING without,
-# TO_COMPLETE a CLOSED activity displayed INCOMPLETE.
-ACTIVE, SUSPENDED, TO_COMPLETE = "ACTIVE", "SUSPENDED", "TO_COMPLETE"
 
 # the instants of a command (the kinds are WORK, TRAVEL, PAUSE)
 _START, _SWITCH = "START", "SWITCH"
@@ -703,53 +698,26 @@ class Work:
             return self.resume(uid, TRAVEL, at)
         return self.switch(uid, TRAVEL, at)
 
-    # ---- what the interfaces called before 1.0 ----
-
     @atomic
-    def command(self, uid, cmd, at=None, exact=False):
+    def perform(self, uid, verb, kind=WORK, at=None, exact=False):
         """
-        One command by name, as the interfaces gave it before 1.0: WORK, TRAVEL, PAUSE start, switch,
-        resume or reopen by the state; SUSPEND, STOP, REOPEN (opens WORK), TICK. Returns the new status.
-        TODO(activity-1.0-ifaces): the interfaces call the named commands instead.
+        One of the actions of texts.entry_actions by name: start, switch, resume, reopen (opening [kind]),
+        stop, tick, untick, delete, restore. The questions of §3 (travel from work, the return trip) are
+        the interface's: it calls travel_from_work, travel_back or stop(return_trip=) after asking.
         """
-        status = self.entry(uid).get("status")
-        if cmd == REOPEN:
-            cmd = WORK
-        if cmd in (WORK, TRAVEL, PAUSE):
-            if status == TODO:
-                self._check_start(cmd)
-                self.start_todo(uid, cmd, at, exact)
-                return RUNNING
-            if status == CLOSED:
-                return self.reopen(uid, cmd, at, exact)
-            return self.switch(uid, cmd, at, exact) if self.open_segment(uid) else self.resume(uid, cmd, at, exact)
-        if cmd == STOP:
+        if verb == "start":
+            return self.start_todo(uid, kind, at, exact)
+        if verb == "switch":
+            return self.switch(uid, kind, at, exact)
+        if verb == "resume":
+            return self.resume(uid, kind, at, exact)
+        if verb == "reopen":
+            return self.reopen(uid, kind, at, exact)
+        if verb == "stop":
             return self.stop(uid, at, exact)
-        if cmd == SUSPEND:
-            return self.suspend(uid, at, exact)
-        if cmd == TICK:
-            return self.tick(uid)
-        raise WorkError("illegal", cmd)
-
-    @atomic
-    def complete(self, uid, allow_empty=False):
-        """
-        What "complete the details" checked after a stop; there is no TO_COMPLETE status any more, a
-        closed activity without them is displayed INCOMPLETE. TODO(activity-1.0-ifaces)
-        """
-        e = self.entry(uid)
-        if e.get("status") != CLOSED:
-            raise WorkError("illegal", f"COMPLETE in {e.get('status')}")
-        if not e.get("clientUid"):
-            raise WorkError("client_required")
-        has_files = any(a.get("entryUid") == uid for a in self.store.all("attachment"))
-        if not allow_empty and not (e.get("activity") or "").strip() and not has_files:
-            raise WorkError("details_missing")
-
-    def close_if_complete(self, uid):
-        """After the stop sheet: whether it has a client and a description. TODO(activity-1.0-ifaces)"""
-        e = self.entry(uid)
-        return e.get("status") == CLOSED and bool(e.get("clientUid")) and bool((e.get("activity") or "").strip())
+        if verb in ("tick", "untick", "delete", "restore"):
+            return getattr(self, verb)(uid)
+        raise WorkError("illegal", verb)
 
     # ---- details ----
 
@@ -784,11 +752,12 @@ class Work:
     @atomic
     def save_todo(self, uid, activity, *, company=None, client=None, role=None, notes="", locality="", tags=(),
                   due_date=None, due_min=None, plan_date=None, plan_min=None, duration_min=None, priority=0,
-                  planned=None):
+                  planned=None, refs=None):
         """
         Creates ([uid] None) or changes a TODO activity; returns its uid. [planned]: [(start ms, end ms,
         kind)] planned segments, replacing the ones it has (None leaves them). company, client and role
-        are a record's uid or a name typed freely, as for the activities.
+        are a record's uid or a name typed freely, as for the activities. [refs]: one external reference a
+        line (the `externalRef` records, replaced; None leaves them).
         """
         activity = (activity or "").strip()
         if not activity:
@@ -838,6 +807,14 @@ class Work:
                 if end <= start:
                     raise WorkError("invalid_range")
                 self._segment(uid, kind, start, end, source=MANUAL, planned=True)
+        if refs is not None:
+            for r in self.store.all("externalRef"):
+                if r.get("entryUid") == uid:
+                    self.store.delete("externalRef", r["uid"], now)
+            for line in refs.splitlines():
+                if line.strip():
+                    self.store.write("externalRef", new_uid(),
+                                     {"entryUid": uid, "kind": ref_kind(line), "value": line.strip()}, now)
         return uid
 
     @atomic

@@ -85,11 +85,6 @@ class Policy:
         return self._section("entries").get("source") in ("plannedOnly", "todosOnly")
 
     @property
-    def todos_only(self):
-        """The old name of planned_only. TODO(activity-1.0-ifaces)"""
-        return self.planned_only
-
-    @property
     def language(self):
         """The interface's language the policy forces (ui.language), or None."""
         value = self._section("ui").get("language")

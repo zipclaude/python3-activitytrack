@@ -15,7 +15,6 @@ from .policy import stored
 from .session import Session
 from .sync import Runner
 from .updates import Updates
-from .todos import Todos, state as todo_state
 from .work import Work, WorkError, local_zone
 
 ID_LEN = 6
@@ -31,7 +30,6 @@ class App:
         # dates and times as chosen on the desktop (Settings → Generale)
         formats.load(self.session.store)
         self.work = Work(self.session.store, stored(self.session.store), zone=local_zone())
-        self.todos = Todos(self.work)
         self.runner = Runner(self.session)
         self.updates = Updates(self.session, self.runner, lambda: self.work.policy)
 
@@ -80,32 +78,35 @@ class App:
 
     # ---- what the commands show ----
 
+    def label(self, e):
+        """The line of an activity: "Client · description", an absence "Ferie · Company · notes"."""
+        w = self.work
+        if e.get("kind") != model.ABSENCE:
+            return w.label(e)
+        kind = texts.ABSENCE_KINDS.get(e.get("absenceKind") or model.ABSENCE, "")
+        return " · ".join(x for x in (kind, w.name("company", e.get("companyUid")), (e.get("notes") or "").strip())
+                          if x)
+
     def entry_info(self, e):
+        """An activity as the listings and the JSON show it: its displayed state, plan, due date, priority."""
         w = self.work
         totals = w.totals(e["uid"])
         state, since = w.display(e)
+        tz = w.tz
         return {
             "id": e["uid"][:ID_LEN], "uid": e["uid"], "status": e.get("status"), "mode": e.get("mode"),
             "kind": e.get("kind"), "display": state, "priority": e.get("priority") or 0,
+            "priority_label": texts.PRIORITIES.get(e.get("priority") or 0, ""),
             "state": texts.display_label(state), "client": w.name("client", e.get("clientUid")),
             "company": w.name("company", e.get("companyUid")), "activity": e.get("activity") or "",
             "tags": e.get("tags") or [], "since": _iso(model.to_ms(since) if since else None),
             "needs_review": bool(e.get("needsReview")),
             "work_min": totals["WORK"] // 60_000, "travel_min": totals["TRAVEL"] // 60_000,
             "pause_min": totals["PAUSE"] // 60_000, "absence_min": totals["ABSENCE"] // 60_000,
-            "absence_kind": e.get("absenceKind"), "label": one_line(w.label(e)),
-        }
-
-    def todo_info(self, t):
-        tz = self.todos.tz()
-        w = self.work
-        st = todo_state(t, datetime.now(tz), tz, w.segments(t["uid"]))
-        return {
-            "id": t["uid"][:ID_LEN], "uid": t["uid"], "title": t.get("activity") or "", "state": st,
-            "state_label": texts.TODO_STATES.get(st, st), "client": w.name("client", t.get("clientUid")),
-            "company": w.name("company", t.get("companyUid")), "when": texts.todo_when(t, tz),
-            "plan_date": t.get("planDate"), "plan_start_min": t.get("planStartMin"),
-            "duration_min": t.get("durationMin"), "due_date": t.get("dueDate"), "priority": t.get("priority"),
+            "absence_kind": e.get("absenceKind"), "label": one_line(self.label(e)),
+            "when": texts.todo_when(e, tz), "plan_date": e.get("planDate"), "plan_start_min": e.get("planStartMin"),
+            "duration_min": e.get("durationMin"), "due_date": e.get("dueDate"),
+            "deleted": e.get("deletedUtcMs") is not None,
         }
 
     def sync_info(self, state="idle", detail=""):

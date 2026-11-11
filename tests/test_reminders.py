@@ -11,8 +11,7 @@ from activitytrack.reminders import (
     italian_holiday,
 )
 from activitytrack.store import Store
-from activitytrack.todos import Todos
-from activitytrack.work import PAUSE, RUNNING, STOP, StartRequest, WORK, Work
+from activitytrack.work import PAUSE, RUNNING, StartRequest, WORK, Work
 
 ROME = ZoneInfo("Europe/Rome")
 # Monday 2 November 2026
@@ -101,8 +100,7 @@ class SourcesTest(unittest.TestCase):
         self.store = Store(Path(self.dir.name) / "d.sqlite3")
         self.now = int(at(MON, 9).timestamp() * 1000)
         self.work = Work(self.store, clock=lambda: self.now, zone="Europe/Rome")
-        self.todos = Todos(self.work)
-        self.src = Sources(self.work, self.todos)
+        self.src = Sources(self.work)
         self.store.pulled({"type": "client", "uid": "c", "rev": 1, "fields": {"name": "Acme", "archived": False}})
 
     def tearDown(self):
@@ -120,15 +118,15 @@ class SourcesTest(unittest.TestCase):
         self.assertEqual(self.src.entries(ROME)[0][3:5], (at(MON, 9, 40), 0))
         # a pause: a new segment, counted from its start
         self.now += 10 * 60_000
-        self.work.command(uid, PAUSE)
+        self.work.switch(uid, PAUSE)
         self.assertEqual(self.src.entries(ROME)[0][3:5], (at(MON, 9, 50), 0))
-        self.work.command(uid, STOP)
+        self.work.stop(uid)
         self.assertEqual(self.src.entries(ROME), [])
         self.assertEqual(self.src.state()["confirm"], {})
 
     def test_planned_todos_and_handled_days(self):
-        t = self.todos.save(None, "Call", plan_date=MON, plan_min=15 * 60, duration_min=30)
-        self.todos.save(None, "Whole day", plan_date=MON)
+        t = self.work.save_todo(None, "Call", plan_date=MON, plan_min=15 * 60, duration_min=30)
+        self.work.save_todo(None, "Whole day", plan_date=MON)
         (p,) = self.src.planned_todos(ROME, at(MON, 10))
         self.assertEqual((p[0], p[1], p[3]), (t, at(MON, 15), None))
         self.src.reminded(Reminder(PLANNED, t, at(MON, 14, 45)), self.now)
@@ -139,7 +137,7 @@ class SourcesTest(unittest.TestCase):
         self.assertEqual(self.src.handled_days(ROME, MON), {MON})
         self.assertEqual(self.src.day_start_state(ROME, MON)[0], None)
         # an absence handles its days, a planned segment does not
-        other = self.todos.save(None, "Later")
+        other = self.work.save_todo(None, "Later")
         self.work.add_segment(other, self.now + 30 * 24 * 3_600_000, self.now + 31 * 24 * 3_600_000, WORK, planned=True)
         absence = self.work.add_absence(date(2026, 11, 9), start_min=540, end_min=600)
         self.assertEqual(self.src.handled_days(ROME, MON), {MON, date(2026, 11, 9)})

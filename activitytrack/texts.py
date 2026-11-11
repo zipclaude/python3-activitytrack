@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """The words of the interface for the activities: field labels, states, errors, times."""
 
+from dataclasses import dataclass
 from datetime import datetime
 
 from . import formats
@@ -17,14 +18,23 @@ FIELDS = {
 
 MODES = {WORK: _("In lavoro"), PAUSE: _("In pausa"), TRAVEL: _("In viaggio")}
 KINDS = {WORK: _("Lavoro"), PAUSE: _("Pausa"), TRAVEL: _("Viaggio"), ABSENCE: _("Assenza")}
-# TODO(activity-1.0-ifaces): the statuses of the schemas before 3 (work.SUSPENDED, work.TO_COMPLETE)
-STATES = {"SUSPENDED": _("Sospesa"), "TO_COMPLETE": _("Dettagli mancanti"), CLOSED: _("Chiusa")}
 
 # the displayed state of an activity (model.display, ACTIVITY-MODEL.md 2.2)
 DISPLAY_STATES = {
     model.DELETED: _("Eliminata"), ABSENCE: _("Assenza"), model.LATE: _("In ritardo"), model.PLANNED: _("Pianificata"),
     TODO: _("Da fare"), WORK: _("In lavoro"), TRAVEL: _("In viaggio"), PAUSE: _("In pausa"),
     model.SUSPENDED: _("Sospesa"), model.DONE: _("Chiusa"), model.INCOMPLETE: _("Dettagli mancanti"),
+}
+# the symbol and the colour of each displayed state on a terminal (§2.2: icon and colour); the colour
+# names of terminal.COLOURS of the cli and the tui: orange, brown and pink need 256 colours, else the
+# nearest of the eight
+DISPLAY_SYMBOLS = {
+    model.DELETED: "✗", ABSENCE: "●", model.LATE: "!", model.PLANNED: "○", TODO: "☐", WORK: "▶", TRAVEL: "➜",
+    PAUSE: "‖", model.SUSPENDED: "☾", model.DONE: "✓", model.INCOMPLETE: "■",
+}
+DISPLAY_COLOURS = {
+    model.DELETED: "grey", ABSENCE: "pink", model.LATE: "brown", model.PLANNED: "grey", TODO: "white", WORK: "green",
+    TRAVEL: "blue", PAUSE: "yellow", model.SUSPENDED: "orange", model.DONE: "greenish", model.INCOMPLETE: "reddish",
 }
 # the stored states, as the owner names them (2.1)
 STATUSES = {TODO: _("Da fare"), RUNNING: _("In corso"), CLOSED: _("Chiusa")}
@@ -37,12 +47,10 @@ NOTICES = {"end_moved": _("La fine dell'attività precedente è stata anticipata
 SECTIONS = {
     "overdue": _("In ritardo"), "missing": _("Dettagli mancanti"), "today": _("Oggi"),
     "next": _("Prossimi giorni"), "earlier": _("Giorni precedenti"), "no_date": _("Senza data"),
-    "ignored": _("Ignorate"),
+    "ignored": _("Eliminate"),
 }
 WINDOWS = {-1: _("Oggi"), 24: _("24 h"), 72: _("3 gg"), 168: _("7 gg"), 720: _("30 gg"), 0: _("Tutti")}
-SHOWS = {"TODO": _("Da fare"), "MISSING": _("Dettagli mancanti"), "DONE": _("Fatte"), "IGNORED": _("Ignorate")}
-TODO_STATES = {"open": _("Aperta"), "planned": _("Pianificata"), "overdue": _("In ritardo"), "done": _("Fatta"),
-               "ignored": _("Ignorata")}
+SHOWS = {"TODO": _("Da fare"), "MISSING": _("Dettagli mancanti"), "DONE": _("Fatte"), "IGNORED": _("Eliminate")}
 
 ERRORS = {
     "client_required": _("Serve il cliente (o un viaggio)."),
@@ -54,7 +62,6 @@ ERRORS = {
     "before_segment": _("L'orario è prima dell'ultimo cambio registrato."),
     "details_missing": _("Manca la descrizione."),
     "planned_only": _("La policy permette di avviare attività solo dai Da fare."),
-    "todos_only": _("La policy permette di avviare attività solo dai Da fare."),
     "no_working_days": _("Nel periodo non ci sono giorni lavorativi: indica un orario."),
     "tag_not_allowed": _("La policy permette solo i tag delle anagrafiche: «%s» non c'è."),
     "times_locked": _("La policy non permette di modificare i tempi."),
@@ -66,7 +73,6 @@ ERRORS = {
     "plan_time_required": _("Per una durata serve l'orario di inizio."),
     "invalid_time": _("Orario non valido."),
     "invalid_priority": _("La priorità va da 0 a 5."),
-    "imported": _("Un Da fare del gestionale non si elimina: si ignora."),
 }
 
 
@@ -79,18 +85,6 @@ def error_text(e):
         return _("Campo obbligatorio: %s.") % FIELDS.get(e.detail, e.detail)
     text = ERRORS.get(e.code, e.code)
     return text % e.detail if "%s" in text else text
-
-
-def state_label(entry):
-    """The state of an activity record, from what it stores (display_label has the full rules)."""
-    if entry.get("deletedUtcMs") is not None:
-        return DISPLAY_STATES[model.DELETED]
-    if entry.get("kind") == ABSENCE:
-        return DISPLAY_STATES[ABSENCE]
-    status = entry.get("status")
-    if status == RUNNING:
-        return MODES.get(entry.get("mode"), DISPLAY_STATES[model.SUSPENDED])
-    return STATUSES.get(status, "")
 
 
 def display_label(state):
@@ -114,7 +108,7 @@ def clock(ms):
 
 def todo_when(t, tz):
     """When a to-do is planned or due, as the app's rows: "lun 02/11 15:00–15:30", "scad. gio 05/11" (formats)."""
-    from .todos import plan_bounds, _day
+    from .model import day_of as _day, plan_bounds
     days = (_("lun"), _("mar"), _("mer"), _("gio"), _("ven"), _("sab"), _("dom"))
     plan = plan_bounds(t, tz)
     today = datetime.now(tz).date()
@@ -234,26 +228,62 @@ def update_state(status, version):
     return _("Nessun aggiornamento: %s è l'ultima versione.") % version
 
 
-def entry_commands(entry, policy):
-    """[(label, command)] the state allows, as the app's card buttons (every interface)."""
-    from .work import REOPEN, STOP
-    status, mode = entry.get("status"), entry.get("mode")
-    if entry.get("deletedUtcMs") is not None or entry.get("kind") == ABSENCE:
-        return []
+@dataclass
+class Action:
+    """A button of an activity: [verb] is a Work command (Work.perform), or "travel_from_work" / "return_trip"."""
+    label: str
+    verb: str
+    kind: str | None = None
+
+
+def entry_actions(work, e):
+    """
+    [Action] the state of the activity [e] allows, as the app's detail dialog (§3, §8): no "Sospendi"
+    (suspend has no button), and from a pause "Riprendi" is the kind open before it. The stop of an
+    activity that asks the return trip (Work.return_trip_offered) and the travel from work (Work.
+    asks_completion) are for the interface to put as questions.
+    """
+    policy = work.policy
+    if e.get("deletedUtcMs") is not None:
+        return [Action(_("Ripristina"), "restore")]
+    if e.get("kind") == ABSENCE:
+        return [Action(_("Elimina"), "delete")] if policy.feature("deleteEntries") else []
     travel = policy.feature("travel")
+    status = e.get("status")
     out = []
     if status == TODO:
-        out.append((_("Lavoro"), WORK))
+        out.append(Action(_("Lavoro"), "start", WORK))
         if travel:
-            out.append((_("Viaggio"), TRAVEL))
-    elif status == RUNNING:
-        if mode != WORK:
-            out.append((_("Riprendi") if mode in (PAUSE, None) else _("Lavoro"), WORK))
-        if mode in (WORK, TRAVEL):
-            out.append((_("Pausa"), PAUSE))
-        if mode != TRAVEL and travel:
-            out.append((_("Viaggio"), TRAVEL))
-        out.append((_("Stop"), STOP))
+            out.append(Action(_("Viaggio"), "start", TRAVEL))
+        out.append(Action(_("Fatto"), "tick"))
+        if policy.feature("deleteTodos") or policy.feature("ignoreTodos"):
+            out.append(Action(_("Elimina"), "delete"))
+        return out
+    if status == RUNNING:
+        seg = work.open_segment(e["uid"])
+        mode = seg.get("kind") if seg is not None else None
+        if mode is None:
+            out.append(Action(_("Lavoro"), "resume", WORK))
+            if travel:
+                out.append(Action(_("Viaggio"), "resume", TRAVEL))
+        elif mode == WORK:
+            out.append(Action(_("Pausa"), "switch", PAUSE))
+            if travel:
+                out.append(Action(_("Viaggio"), "travel_from_work", TRAVEL))
+        elif mode == TRAVEL:
+            out.append(Action(_("Lavoro"), "switch", WORK))
+            out.append(Action(_("Pausa"), "switch", PAUSE))
+        else:
+            before = work.resume_kind(e["uid"])
+            out.append(Action(_("Riprendi"), "switch", before))
+            other = TRAVEL if before == WORK else WORK
+            if other == WORK or travel:
+                out.append(Action(KINDS[other], "switch", other))
+        out.append(Action(_("Stop"), "stop"))
     elif status == CLOSED:
-        out.append((_("Riapri"), REOPEN))
+        if not work.real_segments(e["uid"]):
+            out.append(Action(_("Da fare"), "untick"))
+        out.append(Action(_("Riapri"), "reopen", WORK))
+    if policy.feature("deleteEntries"):
+        out.append(Action(_("Elimina"), "delete"))
     return out

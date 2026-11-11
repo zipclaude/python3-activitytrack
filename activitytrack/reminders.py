@@ -159,9 +159,8 @@ def config_of(policy, local=None):
 class Sources:
     """What the planner needs, from the store, plus the local reminder state (state key "reminders")."""
 
-    def __init__(self, work, todos=None):
-        # [todos] is what the interfaces passed before 1.0, not needed any more
-        self.work, self.todos = work, todos
+    def __init__(self, work):
+        self.work = work
 
     @property
     def store(self):

@@ -382,8 +382,21 @@ class WorkTest(unittest.TestCase):
         self.now += 10 * MIN
         self.work.command(b, TRAVEL)
         self.assertEqual(self.entry(b)["mode"], TRAVEL)
-        # a pause cannot be suspended: it stops
-        self.assertEqual(self.status(a), CLOSED)
+        # a paused activity is suspended, not stopped, like a working one
+        self.assertEqual((self.status(a), self.entry(a)["mode"]), (RUNNING, None))
+        self.assertEqual(self.work.display(self.entry(a))[0], "SUSPENDED")
+
+    def test_a_new_activity_suspends_a_paused_one(self):
+        self.work.policy = policy(features={"concurrentEntries": False})
+        a = self.start()
+        self.now += 10 * MIN
+        self.work.switch(a, PAUSE)
+        self.now += 5 * MIN
+        b = self.start()
+        self.assertEqual((self.status(a), self.entry(a)["mode"]), (RUNNING, None))
+        self.assertEqual(self.work.display(self.entry(a))[0], "SUSPENDED")
+        self.assertEqual(self.work.segments(a)[-1]["endUtcMs"], self.now)
+        self.assertEqual(self.entry(b)["mode"], WORK)
 
     def test_the_legacy_command(self):
         t = self.todo(client="lib")

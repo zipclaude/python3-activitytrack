@@ -398,19 +398,19 @@ class Work:
 
     # ---- commands ----
 
-    def _way(self, e):
-        """The command that leaves room for another activity: a pause cannot be suspended, it stops."""
-        seg = self.open_segment(e["uid"])
-        return STOP if seg is not None and seg.get("kind") == PAUSE else SUSPEND
-
     def _make_room(self, others, when):
-        """The activities running, as the user chose, or suspended without concurrent activities."""
+        """
+        The activities running, as the user chose (STOP, SUSPEND), or suspended without concurrent
+        activities: a working, travelling or paused one alike (§3: suspend is allowed from a pause).
+        """
         for e in self.running():
             cmd = others.get(e["uid"])
             if cmd is None and not self.policy.feature("concurrentEntries") and self.open_segment(e["uid"]):
-                cmd = self._way(e)
-            if cmd is not None:
-                self.command(e["uid"], cmd, at=when)
+                cmd = SUSPEND
+            if cmd == STOP:
+                self.stop(e["uid"], at=when)
+            elif cmd is not None:
+                self.suspend(e["uid"], at=when)
 
     def _step(self, uid, cmd, at=None, exact=False, source=TRACKED):
         """One command of the state machine; (the status after it, the instant)."""
@@ -449,7 +449,7 @@ class Work:
         if mode in (WORK, TRAVEL) and not self.policy.feature("concurrentEntries"):
             for other in self.running():
                 if other["uid"] != uid and self.open_segment(other["uid"]) is not None:
-                    self.command(other["uid"], self._way(other), at=when)
+                    self.suspend(other["uid"], at=when)
         return status, when
 
     def _check_start(self, kind):

@@ -45,3 +45,21 @@ class AppTest(unittest.TestCase):
             with self.assertRaises(InputError):
                 self.app.find("entry", ref)
         self.assertEqual(self.app.sync_info()["state"], "idle")
+
+    def test_infos_of_the_activity_model(self):
+        w = self.app.work
+        t = w.save_todo(None, "Chiamare", client="Acme", priority=3)
+        info = self.app.todo_info(w.entry(t))
+        self.assertEqual((info["title"], info["state"], info["priority"]), ("Chiamare", "open", 3))
+        w.start_todo(t)
+        info = self.app.entry_info(w.entry(t))
+        self.assertEqual((info["display"], info["state"], info["kind"], info["priority"]),
+                         ("WORK", "In lavoro", "ACTIVITY", 3))
+        self.assertIsNotNone(info["since"])
+        w.stop(t)
+        self.assertEqual(self.app.entry_info(w.entry(t))["display"], "DONE")
+        a = w.add_absence(date(2026, 11, 12), start_min=600, end_min=660, absence_kind="LEAVE")
+        info = self.app.entry_info(w.entry(a))
+        self.assertEqual((info["display"], info["absence_kind"], info["absence_min"]), ("ABSENCE", "LEAVE", 60))
+        with self.assertRaises(InputError):
+            self.app.running_one()

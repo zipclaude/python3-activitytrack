@@ -80,9 +80,14 @@ class Policy:
         return default if b is None or type(b) is not type(default) else b
 
     @property
+    def planned_only(self):
+        """Activities start only from TODO activities (`entries.source: plannedOnly`; todosOnly is its old name)."""
+        return self._section("entries").get("source") in ("plannedOnly", "todosOnly")
+
+    @property
     def todos_only(self):
-        """Activities start only from to-dos (`entries.source: todosOnly`)."""
-        return self._section("entries").get("source") == "todosOnly"
+        """The old name of planned_only. TODO(activity-1.0-ifaces)"""
+        return self.planned_only
 
     @property
     def language(self):

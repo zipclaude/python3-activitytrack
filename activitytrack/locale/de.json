@@ -108,5 +108,22 @@
  "Si aggiorna con il gestore di pacchetti del sistema.": "Sie wird vom Paketmanager des Systems aktualisiert.",
  "Per questa installazione il server non ha un pacchetto.": "Der Server hat für diese Installation kein Paket.",
  "Nessun aggiornamento: %s è l'ultima versione.": "Kein Update: %s ist die neueste Version.",
- "Server non raggiungibile: %s": "Server nicht erreichbar: %s"
+ "Server non raggiungibile: %s": "Server nicht erreichbar: %s",
+ "Aggiorna l'app per sincronizzare": "Aktualisiere die App, um zu synchronisieren",
+ "Assenza": "Abwesenheit",
+ "Eliminata": "Gelöscht",
+ "In corso": "Laufend",
+ "Nessuna": "Keine",
+ "Bassa": "Niedrig",
+ "Media": "Mittel",
+ "Alta": "Hoch",
+ "Urgente": "Dringend",
+ "Emergenza": "Notfall",
+ "Ferie": "Urlaub",
+ "Permesso": "Freistellung",
+ "Malattia": "Krankheit",
+ "La fine dell'attività precedente è stata anticipata all'inizio di questa.": "Das Ende der vorherigen Tätigkeit wurde auf den Beginn dieser vorverlegt.",
+ "Nel periodo non ci sono giorni lavorativi: indica un orario.": "Im Zeitraum gibt es keine Arbeitstage: gib eine Uhrzeit an.",
+ "La priorità va da 0 a 5.": "Die Priorität geht von 0 bis 5.",
+ "Riapri": "Wieder öffnen"
 }

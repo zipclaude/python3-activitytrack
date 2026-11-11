@@ -29,6 +29,7 @@ NOT_A_LINK, VERSION, NOT_HTTPS, BAD_PIN = "not_a_link", "version", "not_https", 
 NOT_LOCAL = "not_local"
 INVALID_CODE, USER_DISABLED, NETWORK, CERTIFICATE = "invalid_code", "user_disabled", "network", "certificate"
 SERVER, APP_TOO_OLD, SERVER_TOO_OLD = "server", "app_too_old", "server_too_old"
+UPGRADE_REQUIRED = "upgrade_required"
 
 
 class PairError(Exception):
@@ -125,6 +126,8 @@ def pair(link, allow_http=False):
         answer = json.loads(reply.body)
     except ValueError:
         answer = {}
+    if answer.get("error") == UPGRADE_REQUIRED:
+        raise PairError(UPGRADE_REQUIRED)
     if reply.status == 426:
         raise PairError(SERVER_TOO_OLD if answer.get("error") == "server_too_old" else APP_TOO_OLD)
     if reply.status == 400 and answer.get("error") == "invalid_code":

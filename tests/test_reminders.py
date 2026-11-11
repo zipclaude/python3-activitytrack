@@ -12,7 +12,7 @@ from activitytrack.reminders import (
 )
 from activitytrack.store import Store
 from activitytrack.todos import Todos
-from activitytrack.work import ACTIVE, PAUSE, STOP, StartRequest, WORK, Work
+from activitytrack.work import PAUSE, RUNNING, STOP, StartRequest, WORK, Work
 
 ROME = ZoneInfo("Europe/Rome")
 # Monday 2 November 2026
@@ -42,15 +42,15 @@ class PlannerTest(unittest.TestCase):
         self.p = Planner(dict(DEFAULTS), SCHEDULE, LUNCH, ROME, days_off={date(2026, 11, 3)})
 
     def test_confirm_and_its_limit(self):
-        e = ("e1", ACTIVE, WORK, at(MON, 9), 0, None)
+        e = ("e1", RUNNING, WORK, at(MON, 9), 0, None)
         self.assertEqual(self.p.planned([e], [], at(MON, 9, 10)), [confirm_at(at(MON, 9, 30))])
-        e = ("e1", ACTIVE, WORK, at(MON, 9), 2, None)
+        e = ("e1", RUNNING, WORK, at(MON, 9), 2, None)
         self.assertEqual(self.p.planned([e], [], at(MON, 9, 10))[0].at, at(MON, 10, 30))
         self.p.config["maxConfirmations"] = 2
         self.assertEqual(self.p.planned([e], [], at(MON, 9, 10)), [])
 
     def test_pause_out_of_lunch(self):
-        e = ("e1", ACTIVE, PAUSE, at(MON, 12, 50), 0, None)
+        e = ("e1", RUNNING, PAUSE, at(MON, 12, 50), 0, None)
         self.assertEqual(self.p.planned([e], [], at(MON, 12, 55))[0].at, at(MON, 14))
         self.assertEqual(self.p.planned([e], [], at(MON, 12, 55))[0].kind, PAUSE_KIND)
 
@@ -59,7 +59,7 @@ class PlannerTest(unittest.TestCase):
         self.assertEqual(self.p.planned([], [todo], at(MON, 10))[0], planned_at("t1", at(MON, 14, 45)))
         # reminded for this start: not again; a new start: again
         self.assertEqual(self.p.planned([], [("t1", at(MON, 15), at(MON, 16), at(MON, 15))], at(MON, 10)), [])
-        e = ("e1", ACTIVE, WORK, None, 0, at(MON, 17))
+        e = ("e1", RUNNING, WORK, None, 0, at(MON, 17))
         self.assertEqual(self.p.planned([e], [], at(MON, 10))[0].kind, PLANNED_END)
 
     def test_day_start(self):
@@ -138,6 +138,13 @@ class SourcesTest(unittest.TestCase):
         self.assertEqual(self.src.planned_todos(ROME, at(MON, 10)), [])
         self.assertEqual(self.src.handled_days(ROME, MON), {MON})
         self.assertEqual(self.src.day_start_state(ROME, MON)[0], None)
+        # an absence handles its days, a planned segment does not
+        other = self.todos.save(None, "Later")
+        self.work.add_segment(other, self.now + 30 * 24 * 3_600_000, self.now + 31 * 24 * 3_600_000, WORK, planned=True)
+        absence = self.work.add_absence(date(2026, 11, 9), start_min=540, end_min=600)
+        self.assertEqual(self.src.handled_days(ROME, MON), {MON, date(2026, 11, 9)})
+        self.work.delete(absence)
+        self.assertEqual(self.src.handled_days(ROME, MON), {MON})
         self.store.pulled({"type": "workSchedule", "uid": "w1", "rev": 2,
                            "fields": {"dayOfWeek": 1, "startMin": 540, "endMin": 780}})
         self.assertEqual(self.src.windows("workSchedule"), [(1, 540, 780)])

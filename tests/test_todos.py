@@ -30,16 +30,27 @@ class PlanTest(unittest.TestCase):
 
     def test_overdue_and_state(self):
         block = {"planDate": "2026-11-02", "planStartMin": 900, "durationMin": 30}
+        block, whole, due = [dict(x, status="TODO") for x in (block, {"planDate": "2026-11-02"},
+                                                             {"dueDate": "2026-11-01"})]
         self.assertFalse(overdue(block, at(2026, 11, 2, 15, 30), ROME))
         self.assertTrue(overdue(block, at(2026, 11, 2, 15, 31), ROME))
         # a whole day is over from the next day
-        self.assertFalse(overdue({"planDate": "2026-11-02"}, at(2026, 11, 2, 23, 59), ROME))
-        self.assertTrue(overdue({"planDate": "2026-11-02"}, at(2026, 11, 3), ROME))
-        self.assertTrue(overdue({"dueDate": "2026-11-01"}, at(2026, 11, 2, 0, 1), ROME))
-        self.assertEqual(state({"done": True, "planDate": "2026-01-01"}, at(2026, 11, 2), ROME), "done")
-        self.assertEqual(state({"ignoredUtcMs": 5}, at(2026, 11, 2), ROME), "ignored")
-        self.assertEqual(state({"planDate": "2026-12-01"}, at(2026, 11, 2), ROME), "planned")
-        self.assertEqual(state({}, at(2026, 11, 2), ROME), "open")
+        self.assertFalse(overdue(whole, at(2026, 11, 2, 23, 59), ROME))
+        self.assertTrue(overdue(whole, at(2026, 11, 3), ROME))
+        self.assertTrue(overdue(due, at(2026, 11, 2, 0, 1), ROME))
+        # never once closed or deleted
+        self.assertFalse(overdue(dict(due, status="CLOSED"), at(2026, 11, 2, 0, 1), ROME))
+        self.assertFalse(overdue(dict(due, deletedUtcMs=1), at(2026, 11, 2, 0, 1), ROME))
+        todo = {"status": "TODO"}
+        self.assertEqual(state({"status": "CLOSED", "planDate": "2026-01-01"}, at(2026, 11, 2), ROME), "done")
+        self.assertEqual(state(dict(todo, deletedUtcMs=5), at(2026, 11, 2), ROME), "ignored")
+        self.assertEqual(state(dict(todo, planDate="2026-12-01"), at(2026, 11, 2), ROME), "planned")
+        self.assertEqual(state(dict(todo, dueDate="2026-12-01"), at(2026, 11, 2), ROME), "planned")
+        self.assertEqual(state(dict(todo, planDate="2026-01-01"), at(2026, 11, 2), ROME), "overdue")
+        self.assertEqual(state(todo, at(2026, 11, 2), ROME), "open")
+        # planned segments rule over the plan (2.3)
+        ahead = [{"planned": True, "startUtcMs": 1, "endUtcMs": at(2026, 12, 1).timestamp() * 1000}]
+        self.assertEqual(state(dict(todo, planDate="2026-01-01"), at(2026, 11, 2), ROME, ahead), "planned")
 
     def test_postponed(self):
         block = {"planDate": "2026-11-02", "planStartMin": 900, "durationMin": 30}
@@ -62,18 +73,20 @@ class PlanTest(unittest.TestCase):
 class SectionsTest(unittest.TestCase):
     def test_the_home_list(self):
         now = at(2026, 11, 2, 10)
+        t = {"kind": "ACTIVITY", "status": "TODO"}
         todos = [
-            {"uid": "late", "title": "Late", "planDate": "2026-11-01", "planStartMin": 600},
-            {"uid": "today", "title": "Today", "planDate": "2026-11-02", "planStartMin": 900},
-            {"uid": "tomorrow", "title": "Tomorrow", "dueDate": "2026-11-03"},
-            {"uid": "far", "title": "Far", "planDate": "2026-12-01"},
-            {"uid": "nodate", "title": "No date", "priority": 1},
-            {"uid": "done", "title": "Done", "done": True, "doneUtcMs": at(2026, 11, 2, 9).timestamp() * 1000},
-            {"uid": "ign", "title": "Ign", "ignoredUtcMs": at(2026, 11, 2, 8).timestamp() * 1000},
-            {"uid": "busy", "title": "Busy"},
+            dict(t, uid="late", activity="Late", planDate="2026-11-01", planStartMin=600),
+            dict(t, uid="today", activity="Today", planDate="2026-11-02", planStartMin=900),
+            dict(t, uid="tomorrow", activity="Tomorrow", dueDate="2026-11-03"),
+            dict(t, uid="far", activity="Far", planDate="2026-12-01"),
+            dict(t, uid="nodate", activity="No date", priority=1),
+            dict(t, uid="urgent", activity="Urgent", priority=4),
+            dict(t, uid="done", activity="Done", status="CLOSED", closedUtcMs=at(2026, 11, 2, 9).timestamp() * 1000),
+            dict(t, uid="ign", activity="Ign", deletedUtcMs=at(2026, 11, 2, 8).timestamp() * 1000),
+            dict(t, uid="busy", activity="Busy"),
         ]
-        missing = ({"uid": "e1", "status": "TO_COMPLETE"}, at(2026, 11, 2, 9))
-        closed = ({"uid": "e2", "status": "CLOSED", "tags": ["x"]}, at(2026, 11, 2, 8))
+        missing = ({"uid": "e1", "status": "CLOSED", "_display": "INCOMPLETE"}, at(2026, 11, 2, 9))
+        closed = ({"uid": "e2", "status": "CLOSED", "_display": "DONE", "tags": ["x"]}, at(2026, 11, 2, 8))
 
         def uids(out):
             return {s: [i[1]["uid"] for i in items] for s, items in out}
@@ -81,7 +94,7 @@ class SectionsTest(unittest.TestCase):
         out = uids(sections(todos, [missing, closed], {TODO, MISSING}, -1, now=now, tz=ROME, working={"busy"}))
         # due tomorrow without time: its moment is midnight, the edge of "today" (as the app: isAfter)
         self.assertEqual(out, {"overdue": ["late"], "missing": ["e1"], "today": ["today"], "next": ["tomorrow"],
-                               "no_date": ["nodate"]})
+                               "no_date": ["urgent", "nodate"]})
         out = uids(sections(todos, [missing, closed], {TODO, DONE, IGNORED}, 72, now=now, tz=ROME))
         self.assertEqual(out["today"], ["today", "done", "e2"])
         self.assertEqual(out["next"], ["tomorrow"])
@@ -105,15 +118,21 @@ class TodosTest(unittest.TestCase):
         self.store.close()
         self.dir.cleanup()
 
+    def get(self, uid):
+        return self.store.get("entry", uid)
+
     def test_new_and_changed(self):
         uid = self.todos.save(None, "  Rinnovo certificati ", client="biblioteca", refs="INC1\n\n https://x/1 ",
                               plan_date=date(2026, 11, 2), plan_min=900, duration_min=30, priority=2)
-        t = self.store.get("todo", uid)
-        self.assertEqual((t["title"], t["clientUid"], t["refs"], t["planDate"], t["planStartMin"], t["done"]),
-                         ("Rinnovo certificati", "lib", "INC1\nhttps://x/1", "2026-11-02", 900, False))
+        t = self.get(uid)
+        self.assertEqual((t["activity"], t["clientUid"], t["planDate"], t["planStartMin"], t["status"], t["kind"]),
+                         ("Rinnovo certificati", "lib", "2026-11-02", 900, "TODO", "ACTIVITY"))
+        refs = sorted((r["kind"], r["value"]) for r in self.store.all("externalRef") if r["entryUid"] == uid)
+        self.assertEqual(refs, [("TICKET", "INC1"), ("URL", "https://x/1")])
         self.todos.save(uid, "Rinnovo", client="lib")
-        t = self.store.get("todo", uid)
-        self.assertEqual((t["title"], t["planDate"], t["priority"]), ("Rinnovo", None, None))
+        t = self.get(uid)
+        self.assertEqual((t["activity"], t["planDate"], t["priority"]), ("Rinnovo", None, 0))
+        self.assertEqual([r for r in self.store.all("externalRef") if r["entryUid"] == uid], [])
         for kw, code in ((dict(title=""), "title_required"), (dict(plan_min=600), "plan_day_required"),
                          (dict(plan_date=date(2026, 11, 2), duration_min=30), "plan_time_required"),
                          (dict(priority=7), "invalid_priority")):
@@ -125,21 +144,27 @@ class TodosTest(unittest.TestCase):
     def test_states(self):
         uid = self.todos.save(None, "x")
         self.todos.set_done(uid)
-        first = self.store.get("todo", uid)["doneUtcMs"]
-        self.now += 1000
-        self.todos.set_done(uid)
-        self.assertEqual(self.store.get("todo", uid)["doneUtcMs"], first)
+        t = self.get(uid)
+        self.assertEqual((t["status"], t["closedUtcMs"]), ("CLOSED", self.now))
+        self.assertEqual([x["uid"] for x in self.todos.all()], [uid])
+        self.todos.set_done(uid, False)
+        self.assertEqual(self.get(uid)["status"], "TODO")
         self.todos.set_ignored(uid)
-        t = self.store.get("todo", uid)
-        self.assertEqual((t["done"], t["ignoredUtcMs"]), (False, self.now))
+        t = self.get(uid)
+        self.assertEqual((t["status"], t["deletedUtcMs"]), ("TODO", self.now))
+        self.assertEqual(self.work.todo_list(), [])
+        self.assertEqual([x["uid"] for x in self.todos.all()], [uid])
         self.todos.reopen(uid)
-        t = self.store.get("todo", uid)
-        self.assertEqual((t["done"], t["ignoredUtcMs"], t["doneUtcMs"]), (False, None, None))
+        t = self.get(uid)
+        self.assertEqual((t["status"], t["deletedUtcMs"], t["closedUtcMs"]), ("TODO", None, None))
+        self.todos.set_done(uid)
+        self.todos.reopen(uid)
+        self.assertEqual(self.get(uid)["status"], "TODO")
 
     def test_postpone_and_policy(self):
         uid = self.todos.save(None, "x", plan_date=date(2026, 11, 2), plan_min=900)
         self.todos.postpone(uid, now=at(2026, 11, 2, 10))
-        self.assertEqual(self.store.get("todo", uid)["planStartMin"], 915)
+        self.assertEqual(self.get(uid)["planStartMin"], 915)
         self.work.policy = Policy({"format": "activitytrack-policy", "schema": 1,
                                    "features": {"ignoreTodos": False, "deleteTodos": False, "planning": False},
                                    "settings": {"planSnoozeMin": 60}})
@@ -150,23 +175,37 @@ class TodosTest(unittest.TestCase):
         # an existing plan may stay when planning is off
         self.todos.save(uid, "y", plan_date=date(2026, 11, 2), plan_min=915)
 
-    def test_delete_only_by_hand(self):
+    def test_delete_is_the_bin_also_for_an_imported_one(self):
         uid = self.todos.save(None, "x")
         self.todos.delete(uid)
-        self.assertIsNone(self.store.get("todo", uid))
-        self.store.pulled({"type": "todo", "uid": "imp", "rev": 2,
-                           "fields": {"title": "Ticket", "externalKey": "T-1", "done": False}})
+        self.assertIsNotNone(self.get(uid)["deletedUtcMs"])
+        self.store.pulled({"type": "entry", "uid": "imp", "rev": 2, "fields": {
+            "kind": "ACTIVITY", "status": "TODO", "activity": "Ticket", "externalKey": "T-1"}})
+        self.todos.delete("imp")
+        self.assertEqual(self.get("imp")["deletedUtcMs"], self.now)
+
+    def test_an_absence_is_not_a_todo(self):
+        self.store.pulled({"type": "entry", "uid": "ab", "rev": 2, "fields": {
+            "kind": "ABSENCE", "status": "CLOSED", "absenceKind": "HOLIDAY"}})
+        self.assertEqual(self.todos.all(), [])
         with self.assertRaises(WorkError):
-            self.todos.delete("imp")
+            self.todos.todo("ab")
 
     def test_home_and_startable(self):
         today = self.todos.save(None, "Oggi", client="lib", plan_date=date(2026, 11, 2), plan_min=900)
         self.todos.save(None, "Senza data")
         e = self.work.start(StartRequest(client="lib", activity="Rete"))
         self.work.command(e, STOP)
+        no_client = self.work.start(StartRequest(client="lib", activity="Cavi"))
+        self.work.command(no_client, STOP)
+        self.work.edit(no_client, client="")
         home = dict(self.todos.home(now=at(2026, 11, 2, 10)))
         self.assertEqual([i[1]["uid"] for i in home["today"]], [today])
         self.assertIn("no_date", home)
+        # a closed activity without what it needs is "missing"; a complete one is done
+        self.assertEqual([i[1]["uid"] for i in home["missing"]], [no_client])
+        done = dict(self.todos.home((DONE,), now=at(2026, 11, 2, 10)))
+        self.assertEqual([i[1]["uid"] for i in done["today"]], [e])
         self.assertEqual([t["uid"] for t in self.todos.startable(now=at(2026, 11, 2, 10))], [today])
         # started: shown by its activity, not in the list
         self.work.start(StartRequest(todo=today, client="lib"))

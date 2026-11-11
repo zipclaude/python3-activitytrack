@@ -108,5 +108,22 @@
  "Si aggiorna con il gestore di pacchetti del sistema.": "It is updated by the system's package manager.",
  "Per questa installazione il server non ha un pacchetto.": "The server has no package for this installation.",
  "Nessun aggiornamento: %s è l'ultima versione.": "No update: %s is the latest version.",
- "Server non raggiungibile: %s": "Server not reachable: %s"
+ "Server non raggiungibile: %s": "Server not reachable: %s",
+ "Aggiorna l'app per sincronizzare": "Update the app to sync",
+ "Assenza": "Absence",
+ "Eliminata": "Deleted",
+ "In corso": "Running",
+ "Nessuna": "None",
+ "Bassa": "Low",
+ "Media": "Medium",
+ "Alta": "High",
+ "Urgente": "Urgent",
+ "Emergenza": "Emergency",
+ "Ferie": "Holiday",
+ "Permesso": "Leave",
+ "Malattia": "Sick leave",
+ "La fine dell'attività precedente è stata anticipata all'inizio di questa.": "The end of the previous activity was moved back to the start of this one.",
+ "Nel periodo non ci sono giorni lavorativi: indica un orario.": "There are no working days in the period: give a time.",
+ "La priorità va da 0 a 5.": "The priority goes from 0 to 5.",
+ "Riapri": "Reopen"
 }

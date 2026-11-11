@@ -10,7 +10,7 @@ earliest later one arms the timer.
 - pause: "Ancora in pausa?" at the last reminder + interval, out of the lunch break;
 - day start: "Nessuna attività oggi", the first working interval + delay, on
   working days not off nor handled (an activity started, an absence);
-- planned: a planned to-do, its start - lead, once per planned start;
+- planned: a planned TODO activity, its start - lead, once per planned start;
 - planned end: the end chosen when starting, while the activity runs.
 
 The last confirmation and the unanswered count stay on this PC, as on the
@@ -20,8 +20,8 @@ phone (they do not travel): a new segment starts them again.
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
-from .todos import plan_bounds
-from .work import ACTIVE, PAUSE, TRAVEL, WORK
+from . import model
+from .model import PAUSE, RUNNING, TRAVEL, WORK, plan_bounds
 
 CONFIRM, PAUSE_KIND, DAY_START, PLANNED, PLANNED_END = "confirm", "pause", "day_start", "planned", "planned_end"
 KINDS = (CONFIRM, PAUSE_KIND, DAY_START, PLANNED, PLANNED_END)
@@ -36,7 +36,7 @@ LIMITS = {"confirmIntervalMin": (10, 240), "maxConfirmations": (0, 100), "pauseI
 @dataclass(frozen=True)
 class Reminder:
     kind: str
-    key: str        # the entry or to-do uid, the day for a day start
+    key: str        # the activity uid, the day for a day start
     at: datetime
 
 
@@ -62,9 +62,7 @@ def italian_holiday(d):
             or d == easter(d.year) + timedelta(days=1))
 
 
-def _at(day, minute, tz):
-    from .todos import _at as at
-    return at(day, minute, tz)
+_at = model.at_minute
 
 
 class Planner:
@@ -93,7 +91,7 @@ class Planner:
 
     def planned(self, entries, todos, now, day_start=None):
         """
-        entries: [(uid, status, mode, last confirmed, unanswered, planned end)],
+        entries: [(uid, status, mode (the open segment's kind), last confirmed, unanswered, planned end)],
         times as datetimes; todos: [(uid, start, end, reminded start)];
         day_start: (last shown day, handled days) or None when switched off.
         """
@@ -103,9 +101,9 @@ class Planner:
             if reminded != start and now < end:
                 out.append(Reminder(PLANNED, uid, start - timedelta(minutes=c["planLeadMin"])))
         for uid, status, mode, confirmed, unanswered, planned_end in entries:
-            if status == ACTIVE and planned_end is not None:
+            if status == RUNNING and mode is not None and planned_end is not None:
                 out.append(Reminder(PLANNED_END, uid, planned_end))
-            if status != ACTIVE or confirmed is None:
+            if status != RUNNING or confirmed is None:
                 continue
             if mode in (WORK, TRAVEL):
                 if c["maxConfirmations"] == 0 or unanswered < c["maxConfirmations"]:
@@ -161,7 +159,8 @@ def config_of(policy, local=None):
 class Sources:
     """What the planner needs, from the store, plus the local reminder state (state key "reminders")."""
 
-    def __init__(self, work, todos):
+    def __init__(self, work, todos=None):
+        # [todos] is what the interfaces passed before 1.0, not needed any more
         self.work, self.todos = work, todos
 
     @property
@@ -191,7 +190,8 @@ class Sources:
                 confirms[e["uid"]] = c
                 changed = True
             c = c or {}
-            out.append((e["uid"], e.get("status"), e.get("mode"), self._dt(c.get("at"), tz), c.get("unanswered", 0),
+            out.append((e["uid"], e.get("status"), seg.get("kind") if seg else None, self._dt(c.get("at"), tz),
+                        c.get("unanswered", 0),
                         self._dt(e.get("plannedEndUtcMs"), tz)))
         # the activities no longer running leave no state behind
         running = {e["uid"] for e in self.work.running()}
@@ -204,13 +204,10 @@ class Sources:
         return out
 
     def planned_todos(self, tz, now):
-        """Open to-dos planned at a time (not a whole day), without an activity running of their own."""
-        started = {e.get("todoUid") for e in self.work.running() if e.get("status") == ACTIVE}
+        """TODO activities planned at a time (not a whole day)."""
         reminded = self.state().get("planned", {})
         out = []
-        for t in self.todos.all():
-            if t.get("done") or t.get("ignoredUtcMs") or t["uid"] in started:
-                continue
+        for t in self.work.todo_list():
             plan = plan_bounds(t, tz)
             if plan is None or plan[2]:
                 continue
@@ -225,15 +222,12 @@ class Sources:
     def handled_days(self, tz, today):
         """Days with an activity started or an absence; today too while an activity is at work."""
         out = set()
-        for a in self.store.all("absence"):
-            try:
-                out.add(date.fromisoformat(a.get("date")))
-            except (TypeError, ValueError):
-                pass
+        live = {e["uid"] for e in self.work.entries()}
         for s in self.store.all("segment"):
-            if s.get("startUtcMs"):
+            # an absence's segments (kind ABSENCE) count like worked ones; a planned one does not
+            if s.get("startUtcMs") and s.get("entryUid") in live and not model.is_planned(s):
                 out.add(datetime.fromtimestamp(s["startUtcMs"] / 1000, tz).date())
-        if any(e.get("status") == ACTIVE for e in self.work.running()):
+        if any(self.work.open_segment(e["uid"]) for e in self.work.running()):
             out.add(today)
         return out
 
@@ -271,7 +265,7 @@ class Sources:
             if c is not None:
                 c["at"] = now_ms
         elif r.kind == PLANNED:
-            plan = plan_bounds(self.store.get("todo", r.key) or {}, r.at.tzinfo)
+            plan = plan_bounds(self.store.get("entry", r.key) or {}, r.at.tzinfo)
             if plan:
                 st.setdefault("planned", {})[r.key] = int(plan[0].timestamp() * 1000)
         elif r.kind == DAY_START:

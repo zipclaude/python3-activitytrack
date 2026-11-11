@@ -24,7 +24,11 @@ class SyncRevoked(Exception):
 
 
 class SyncIncompatible(Exception):
-    """426: the server does not speak this schema; [code] says which side to update."""
+    """
+    426, or an `upgrade_required` answer: the server does not speak this schema; [code] says which side
+    (or what) to update. upgrade_required (ACTIVITY-MODEL.md §6) is what a server of schema 3 answers to
+    a client of an older one: "Aggiorna l'app per sincronizzare".
+    """
 
     def __init__(self, code):
         super().__init__(code)
@@ -36,11 +40,19 @@ class SyncIncompatible(Exception):
             code = json.loads(body).get("error")
         except (ValueError, AttributeError):
             code = None
-        return cls(code if code in (wire.APP_TOO_OLD, wire.SERVER_TOO_OLD) else wire.APP_TOO_OLD)
+        return cls(code if code in wire.INCOMPATIBLE_CODES else wire.APP_TOO_OLD)
 
 
 class SyncFailed(Exception):
     pass
+
+
+def _error_code(body):
+    try:
+        code = json.loads(body).get("error")
+    except (ValueError, AttributeError, TypeError):
+        return None
+    return code if isinstance(code, str) else None
 
 
 @dataclass
@@ -99,6 +111,9 @@ class SyncEngine:
         if reply.status == 426:
             raise SyncIncompatible.of(reply.body)
         if reply.status != 200:
+            # whatever the status, the server names this refusal
+            if _error_code(reply.body) == wire.UPGRADE_REQUIRED:
+                raise SyncIncompatible(wire.UPGRADE_REQUIRED)
             raise SyncFailed(f"HTTP {reply.status} on {path}")
         try:
             answer = json.loads(reply.body)
@@ -230,7 +245,7 @@ class Runner:
 
     def refresh_update(self):
         """Asks the server for its manifest now ("Check now"): "" when asked; UNPAIRED, REVOKED or
-        INCOMPATIBLE + ":" + the code of the server (wire.APP_TOO_OLD, wire.SERVER_TOO_OLD) when the server
+        INCOMPATIBLE + ":" + the code of the server (wire.INCOMPATIBLE_CODES) when the server
         refuses; else the text of what went wrong (the network)."""
         try:
             http = self.session.http()

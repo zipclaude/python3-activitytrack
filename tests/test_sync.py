@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 import sqlite3
 import tempfile
+import types
 import unittest
 from pathlib import Path
 
@@ -141,6 +142,57 @@ class SyncTest(unittest.TestCase):
         self.server.status = None
         self.engine.sync()
         self.assertFalse(self.store.has_pending())
+
+
+class UpgradeRequiredTest(unittest.TestCase):
+    """The server of schema 3 refuses an older client with `upgrade_required` (ACTIVITY-MODEL.md §6)."""
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.store = Store(Path(self.dir.name) / "d.sqlite3")
+        self.server = FakeServer()
+
+    def tearDown(self):
+        self.store.close()
+        self.dir.cleanup()
+
+    def test_the_schema_is_3(self):
+        from activitytrack import wire
+        self.assertEqual(wire.SCHEMA, 3)
+
+    def test_whatever_the_status(self):
+        from activitytrack import wire
+        for status in (426, 400, 409):
+            self.server.status, self.server.error = status, "upgrade_required"
+            with self.assertRaises(SyncIncompatible) as e:
+                SyncEngine(self.store, self.server).sync()
+            self.assertEqual(e.exception.code, wire.UPGRADE_REQUIRED)
+        self.assertEqual(self.store.get_state("last_error"), "incompatible: upgrade_required")
+
+    def test_the_runner_states_and_says_what_to_do(self):
+        from activitytrack import texts
+        from activitytrack.sync import Runner
+        r = Runner(_Session(self.store, self.server))
+        self.server.status, self.server.error = 426, "upgrade_required"
+        self.assertEqual(r.run(), ("incompatible", "upgrade_required"))
+        self.assertEqual(self.store.get_state("incompatible"), "upgrade_required")
+        self.assertEqual(r.refresh_update(), "incompatible:upgrade_required")
+        paired = types.SimpleNamespace(store=self.store, account=object())
+        self.assertEqual(texts.sync_state(paired, "incompatible"), "Aggiorna l'app per sincronizzare")
+        self.assertTrue(texts.sync_needs_attention(paired))
+        # a refusal of another kind stays what it was
+        self.server.status, self.server.error = 500, "boom"
+        self.assertEqual(r.run()[0], "failed")
+
+    def test_translated(self):
+        from activitytrack import i18n, texts
+        try:
+            i18n.set_language("en")
+            self.assertEqual(i18n._(texts.UPGRADE_REQUIRED), "Update the app to sync")
+            i18n.set_language("de")
+            self.assertNotEqual(i18n._(texts.UPGRADE_REQUIRED), texts.UPGRADE_REQUIRED)
+        finally:
+            i18n.set_language("it")
 
 
 class _Session:

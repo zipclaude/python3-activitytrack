@@ -9,14 +9,14 @@ the dates and times typed by the user.
 import re
 from datetime import date, datetime, time, timedelta
 
-from . import formats, texts
+from . import formats, model, texts
 from .i18n import _
 from .policy import stored
 from .session import Session
 from .sync import Runner
 from .updates import Updates
 from .todos import Todos, state as todo_state
-from .work import ACTIVE, Work, WorkError, local_zone
+from .work import Work, WorkError, local_zone
 
 ID_LEN = 6
 
@@ -68,10 +68,10 @@ class App:
         return found[0]
 
     def running_one(self, ref=None, active_only=False):
-        """The activity [ref], or the only one running."""
+        """The activity [ref], or the only one running ([active_only]: with an open segment)."""
         if ref:
             return self.find("entry", ref)
-        running = [e for e in self.work.running() if not active_only or e.get("status") == ACTIVE]
+        running = [e for e in self.work.running() if not active_only or self.work.open_segment(e["uid"])]
         if len(running) == 1:
             return running[0]
         if not running:
@@ -83,23 +83,25 @@ class App:
     def entry_info(self, e):
         w = self.work
         totals = w.totals(e["uid"])
-        seg = w.open_segment(e["uid"])
-        since = seg["startUtcMs"] if seg else (w.last_boundary(e["uid"]) or None)
+        state, since = w.display(e)
         return {
             "id": e["uid"][:ID_LEN], "uid": e["uid"], "status": e.get("status"), "mode": e.get("mode"),
-            "state": texts.state_label(e), "client": w.name("client", e.get("clientUid")),
+            "kind": e.get("kind"), "display": state, "priority": e.get("priority") or 0,
+            "state": texts.display_label(state), "client": w.name("client", e.get("clientUid")),
             "company": w.name("company", e.get("companyUid")), "activity": e.get("activity") or "",
-            "tags": e.get("tags") or [], "since": _iso(since), "needs_review": bool(e.get("needsReview")),
+            "tags": e.get("tags") or [], "since": _iso(model.to_ms(since) if since else None),
+            "needs_review": bool(e.get("needsReview")),
             "work_min": totals["WORK"] // 60_000, "travel_min": totals["TRAVEL"] // 60_000,
-            "pause_min": totals["PAUSE"] // 60_000, "label": one_line(w.label(e)),
+            "pause_min": totals["PAUSE"] // 60_000, "absence_min": totals["ABSENCE"] // 60_000,
+            "absence_kind": e.get("absenceKind"), "label": one_line(w.label(e)),
         }
 
     def todo_info(self, t):
         tz = self.todos.tz()
-        st = todo_state(t, datetime.now(tz), tz)
         w = self.work
+        st = todo_state(t, datetime.now(tz), tz, w.segments(t["uid"]))
         return {
-            "id": t["uid"][:ID_LEN], "uid": t["uid"], "title": t.get("title") or "", "state": st,
+            "id": t["uid"][:ID_LEN], "uid": t["uid"], "title": t.get("activity") or "", "state": st,
             "state_label": texts.TODO_STATES.get(st, st), "client": w.name("client", t.get("clientUid")),
             "company": w.name("company", t.get("companyUid")), "when": texts.todo_when(t, tz),
             "plan_date": t.get("planDate"), "plan_start_min": t.get("planStartMin"),

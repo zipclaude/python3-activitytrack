@@ -16,6 +16,8 @@ class FakeServer:
         self.gone = []
         self.refuse = set()
         self.status = None
+        # the error code a refusal carries (426 says app_too_old unless told otherwise)
+        self.error = None
         self.requests = []
         # the signed update manifest the server relays in sync/head (absent: an older server)
         self.update = ...
@@ -42,7 +44,9 @@ class FakeServer:
     def send(self, method, path, body=None):
         self.requests.append((method, path, json.loads(body) if body else None))
         if self.status is not None:
-            return Reply(self.status, json.dumps({"error": "app_too_old"}) if self.status == 426 else "{}")
+            if self.error or self.status == 426:
+                return Reply(self.status, json.dumps({"error": self.error or "app_too_old"}))
+            return Reply(self.status, "{}")
         u = urlsplit(path)
         if u.path == "sync/head":
             head = {"rev": self.rev, "serverTime": self.now(), "filesMaxMb": 25}

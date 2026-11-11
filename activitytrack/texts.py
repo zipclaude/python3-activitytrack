@@ -5,7 +5,8 @@ from datetime import datetime
 
 from . import formats
 from .i18n import _
-from .work import ACTIVE, CLOSED, PAUSE, SUSPENDED, TO_COMPLETE, TRAVEL, WORK
+from . import model
+from .model import ABSENCE, CLOSED, PAUSE, RUNNING, TODO, TRAVEL, WORK
 
 # the app's names of the fields; the policy may rename them
 FIELDS = {
@@ -15,8 +16,22 @@ FIELDS = {
 }
 
 MODES = {WORK: _("In lavoro"), PAUSE: _("In pausa"), TRAVEL: _("In viaggio")}
-KINDS = {WORK: _("Lavoro"), PAUSE: _("Pausa"), TRAVEL: _("Viaggio")}
-STATES = {SUSPENDED: _("Sospesa"), TO_COMPLETE: _("Dettagli mancanti"), CLOSED: _("Chiusa")}
+KINDS = {WORK: _("Lavoro"), PAUSE: _("Pausa"), TRAVEL: _("Viaggio"), ABSENCE: _("Assenza")}
+# TODO(activity-1.0-ifaces): the statuses of the schemas before 3 (work.SUSPENDED, work.TO_COMPLETE)
+STATES = {"SUSPENDED": _("Sospesa"), "TO_COMPLETE": _("Dettagli mancanti"), CLOSED: _("Chiusa")}
+
+# the displayed state of an activity (model.display, ACTIVITY-MODEL.md 2.2)
+DISPLAY_STATES = {
+    model.DELETED: _("Eliminata"), ABSENCE: _("Assenza"), model.LATE: _("In ritardo"), model.PLANNED: _("Pianificata"),
+    TODO: _("Da fare"), WORK: _("In lavoro"), TRAVEL: _("In viaggio"), PAUSE: _("In pausa"),
+    model.SUSPENDED: _("Sospesa"), model.DONE: _("Chiusa"), model.INCOMPLETE: _("Dettagli mancanti"),
+}
+# the stored states, as the owner names them (2.1)
+STATUSES = {TODO: _("Da fare"), RUNNING: _("In corso"), CLOSED: _("Chiusa")}
+PRIORITIES = {0: _("Nessuna"), 1: _("Bassa"), 2: _("Media"), 3: _("Alta"), 4: _("Urgente"), 5: _("Emergenza")}
+ABSENCE_KINDS = {ABSENCE: _("Assenza"), "HOLIDAY": _("Ferie"), "LEAVE": _("Permesso"), "SICK": _("Malattia")}
+# what a command leaves to tell the user (Work.notices)
+NOTICES = {"end_moved": _("La fine dell'attività precedente è stata anticipata all'inizio di questa.")}
 
 # the Home list (app HomeList.kt, HomeTabs.kt)
 SECTIONS = {
@@ -38,7 +53,9 @@ ERRORS = {
     "too_short": _("L'attività è troppo breve."),
     "before_segment": _("L'orario è prima dell'ultimo cambio registrato."),
     "details_missing": _("Manca la descrizione."),
+    "planned_only": _("La policy permette di avviare attività solo dai Da fare."),
     "todos_only": _("La policy permette di avviare attività solo dai Da fare."),
+    "no_working_days": _("Nel periodo non ci sono giorni lavorativi: indica un orario."),
     "tag_not_allowed": _("La policy permette solo i tag delle anagrafiche: «%s» non c'è."),
     "times_locked": _("La policy non permette di modificare i tempi."),
     "illegal": _("Comando non possibile in questo stato."),
@@ -48,7 +65,7 @@ ERRORS = {
     "plan_day_required": _("Per un orario pianificato serve il giorno."),
     "plan_time_required": _("Per una durata serve l'orario di inizio."),
     "invalid_time": _("Orario non valido."),
-    "invalid_priority": _("La priorità va da 1 a 5."),
+    "invalid_priority": _("La priorità va da 0 a 5."),
     "imported": _("Un Da fare del gestionale non si elimina: si ignora."),
 }
 
@@ -65,9 +82,20 @@ def error_text(e):
 
 
 def state_label(entry):
-    if entry.get("status") == ACTIVE:
-        return MODES.get(entry.get("mode"), "")
-    return STATES.get(entry.get("status"), "")
+    """The state of an activity record, from what it stores (display_label has the full rules)."""
+    if entry.get("deletedUtcMs") is not None:
+        return DISPLAY_STATES[model.DELETED]
+    if entry.get("kind") == ABSENCE:
+        return DISPLAY_STATES[ABSENCE]
+    status = entry.get("status")
+    if status == RUNNING:
+        return MODES.get(entry.get("mode"), DISPLAY_STATES[model.SUSPENDED])
+    return STATUSES.get(status, "")
+
+
+def display_label(state):
+    """The words of a displayed state (model.display's first value)."""
+    return DISPLAY_STATES.get(state, state)
 
 
 def hm(ms):
@@ -109,10 +137,14 @@ def todo_when(t, tz):
 
 # ---- pairing and sync, for every interface ----
 
+# what a server of the wire schema 3 answers to an older client (ACTIVITY-MODEL.md §6)
+UPGRADE_REQUIRED = _("Aggiorna l'app per sincronizzare")
+
 def pair_error(code):
     """What a refused pairing says (pairing.PairError.code)."""
     from . import pairing
     errors = {
+        pairing.UPGRADE_REQUIRED: UPGRADE_REQUIRED,
         pairing.NOT_A_LINK: _("Non è un collegamento di associazione: copialo dalla pagina «Dispositivi» del web."),
         pairing.VERSION: _("Collegamento di una versione che questa app non conosce: aggiorna ActivityTrack sul PC."),
         pairing.NOT_HTTPS: _("Il server deve usare HTTPS."),
@@ -142,6 +174,8 @@ def sync_state(session, state="idle", detail=""):
         return _("Il server ha revocato l'associazione di questo PC. I dati restano qui: "
                  "per sincronizzare di nuovo associalo dalla pagina «Dispositivi» del web.")
     code = store.get_state("incompatible")
+    if code == wire.UPGRADE_REQUIRED:
+        return UPGRADE_REQUIRED
     if code == wire.SERVER_TOO_OLD:
         return _("Questa versione è più recente del server ActivityTrack Web: va aggiornato il server "
                  "(avvisa l'amministratore). I dati restano qui e si sincronizzano dopo l'aggiornamento.")
@@ -181,6 +215,8 @@ def update_state(status, version):
                  "per sincronizzare di nuovo associalo dalla pagina «Dispositivi» del web.")
     if s == updates.INCOMPATIBLE:
         from . import wire
+        if status.error == wire.UPGRADE_REQUIRED:
+            return UPGRADE_REQUIRED
         if status.error == wire.SERVER_TOO_OLD:
             return _("Questa versione è più recente del server ActivityTrack Web: va aggiornato il server "
                      "(avvisa l'amministratore). I dati restano qui e si sincronizzano dopo l'aggiornamento.")
@@ -200,23 +236,24 @@ def update_state(status, version):
 
 def entry_commands(entry, policy):
     """[(label, command)] the state allows, as the app's card buttons (every interface)."""
-    from .work import STOP, SUSPEND
+    from .work import REOPEN, STOP
     status, mode = entry.get("status"), entry.get("mode")
+    if entry.get("deletedUtcMs") is not None or entry.get("kind") == ABSENCE:
+        return []
     travel = policy.feature("travel")
     out = []
-    if status == ACTIVE:
+    if status == TODO:
+        out.append((_("Lavoro"), WORK))
+        if travel:
+            out.append((_("Viaggio"), TRAVEL))
+    elif status == RUNNING:
         if mode != WORK:
-            out.append((_("Riprendi") if mode == PAUSE else _("Lavoro"), WORK))
-        if mode != PAUSE:
+            out.append((_("Riprendi") if mode in (PAUSE, None) else _("Lavoro"), WORK))
+        if mode in (WORK, TRAVEL):
             out.append((_("Pausa"), PAUSE))
         if mode != TRAVEL and travel:
             out.append((_("Viaggio"), TRAVEL))
-        if mode != PAUSE:
-            out.append((_("Sospendi"), SUSPEND))
         out.append((_("Stop"), STOP))
-    elif status == SUSPENDED:
-        out.append((_("Riprendi"), WORK))
-        if travel:
-            out.append((_("Viaggio"), TRAVEL))
-        out.append((_("Stop"), STOP))
+    elif status == CLOSED:
+        out.append((_("Riapri"), REOPEN))
     return out

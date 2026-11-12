@@ -324,6 +324,15 @@ class WorkTest(unittest.TestCase):
                 self.start(**kw)
             self.assertEqual(err.exception.code, code)
 
+    def test_a_past_activity_leaves_the_running_ones_alone(self):
+        self.work.policy = policy(features={"concurrentEntries": False})
+        a = self.start(start_ms=self.now - 60 * MIN)
+        self.start(start_ms=self.now - 180 * MIN, end_ms=self.now - 120 * MIN)
+        self.assertEqual(self.work.open_segment(a)["startUtcMs"], self.now - 60 * MIN)
+        self.assertEqual(self.entry(a)["mode"], WORK)
+        self.now += 10 * MIN
+        self.assertEqual(self.work.totals(a)[WORK], 70 * MIN)
+
     def test_a_backdated_command_is_clamped(self):
         uid = self.start()
         self.now += 30 * MIN

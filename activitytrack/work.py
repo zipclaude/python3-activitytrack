@@ -492,7 +492,9 @@ class Work:
                              "notes": bool(req.notes.strip()), "tags": bool(req.tags)})
         tags = self._tags(req.tags)
         when = start if start is not None else self._new_instant(now, req.mode)
-        self._make_room(req.others, when)
+        # an activity already over when it is recorded does not interrupt what is running now
+        if req.end_ms is None or req.end_ms > now:
+            self._make_room(req.others, when)
         uid = new_uid()
         self.store.write("entry", uid, {
             "kind": ACTIVITY, "status": RUNNING, "mode": req.mode, "zoneId": self.zone,

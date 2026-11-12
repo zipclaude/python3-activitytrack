@@ -1150,6 +1150,36 @@
 				],
 				"external_ref": []
 			}
+		},
+		{
+			"name": "a blank external_key is no key: blank ones never clash, a real one stays",
+			"zone": "Europe/Rome",
+			"before": {
+				"time_entry": [
+					{"company_id": 1, "created_utc_ms": 1793606401000, "id": 1, "status": "CLOSED", "todo_id": 3, "uid": "c37-e1", "updated_utc_ms": 1793610000001, "zone_id": "Europe/Rome"}
+				],
+				"segment": [
+					{"end_utc_ms": 1793696400000, "entry_id": 1, "id": 1, "kind": "WORK", "source": "TRACKED", "start_utc_ms": 1793692800000, "uid": "seg-1", "zone_id": "Europe/Rome"}
+				],
+				"todo": [
+					{"company_id": 1, "created_utc_ms": 1793606400010, "done": 0, "external_key": "", "id": 1, "refs": "", "title": "Chiave vuota", "uid": "c37-t1", "updated_utc_ms": 1793606401000},
+					{"company_id": 1, "created_utc_ms": 1793606400020, "done": 0, "external_key": "  ", "id": 2, "refs": "", "title": "Chiave di spazi", "uid": "c37-t2", "updated_utc_ms": 1793606401000},
+					{"company_id": 1, "created_utc_ms": 1793606400030, "done": 1, "done_utc_ms": 1793606409000, "external_key": "\t", "id": 3, "refs": "", "title": "Assorbita, vuota", "uid": "c37-t3", "updated_utc_ms": 1793606401000},
+					{"company_id": 1, "created_utc_ms": 1793606400040, "done": 0, "external_key": "K-9", "id": 4, "refs": "", "title": "Chiave vera", "uid": "c37-t4", "updated_utc_ms": 1793606401000}
+				]
+			},
+			"after": {
+				"time_entry": [
+					{"activity": "Assorbita, vuota", "closed_utc_ms": 1793696400000, "company_id": 1, "created_utc_ms": 1793606401000, "kind": "ACTIVITY", "needs_review": 0, "priority": 0, "status": "CLOSED", "uid": "c37-e1", "unanswered_reminders": 0, "updated_utc_ms": 1793610000001, "zone_id": "Europe/Rome"},
+					{"activity": "Chiave vuota", "company_id": 1, "created_utc_ms": 1793606400010, "kind": "ACTIVITY", "needs_review": 0, "priority": 0, "status": "TODO", "uid": "c37-t1", "unanswered_reminders": 0, "updated_utc_ms": 1793606401000, "zone_id": "Europe/Rome"},
+					{"activity": "Chiave di spazi", "company_id": 1, "created_utc_ms": 1793606400020, "kind": "ACTIVITY", "needs_review": 0, "priority": 0, "status": "TODO", "uid": "c37-t2", "unanswered_reminders": 0, "updated_utc_ms": 1793606401000, "zone_id": "Europe/Rome"},
+					{"activity": "Chiave vera", "company_id": 1, "created_utc_ms": 1793606400040, "external_key": "K-9", "kind": "ACTIVITY", "needs_review": 0, "priority": 0, "status": "TODO", "uid": "c37-t4", "unanswered_reminders": 0, "updated_utc_ms": 1793606401000, "zone_id": "Europe/Rome"}
+				],
+				"segment": [
+					{"end_utc_ms": 1793696400000, "entry_uid": "c37-e1", "kind": "WORK", "planned": 0, "source": "TRACKED", "start_utc_ms": 1793692800000, "uid": "seg-1", "zone_id": "Europe/Rome"}
+				],
+				"external_ref": []
+			}
 		}
 	]
 }

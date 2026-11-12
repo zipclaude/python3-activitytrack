@@ -178,7 +178,7 @@ def parse_minute(text):
 
 def parse_when(text, today=None):
     """"9:30" (today) or "3/11 9:30" or "2026-11-03 9:30 pm" → epoch ms."""
-    parts = (text or "").split()
+    parts = (text or "").split() or [""]  # blank: parse_minute says so
     if len(parts) > 1 and parts[-1].lower().strip(".") in ("am", "pm", "a", "p"):
         parts[-2:] = [" ".join(parts[-2:])]
     day = parse_day(parts[0], today) if len(parts) == 2 else (today or date.today())

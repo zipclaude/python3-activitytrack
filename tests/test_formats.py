@@ -57,6 +57,9 @@ class FormatsTest(unittest.TestCase):
             app_module.parse_minute("13 pm")
         when = app_module.parse_when("11/3 9:30 PM", today)
         self.assertEqual(datetime.fromtimestamp(when / 1000).strftime("%Y-%m-%d %H:%M"), "2026-11-03 21:30")
+        for blank in ("", "   ", None):
+            with self.assertRaises(app_module.InputError):
+                app_module.parse_when(blank, today)
         now = datetime.now()
         self.assertTrue(texts.clock(int(now.timestamp() * 1000)).endswith(("AM", "PM")))
         formats.set_formats(formats.EU, formats.H24)

@@ -174,10 +174,20 @@ class HomeTest(unittest.TestCase):
         self.work.delete("imp")
         self.assertEqual(self.get("imp")["deletedUtcMs"], self.now)
 
-    def test_an_absence_is_not_in_the_list(self):
-        self.store.pulled({"type": "entry", "uid": "ab", "rev": 2, "fields": {
-            "kind": "ABSENCE", "status": "CLOSED", "absenceKind": "HOLIDAY"}})
-        self.assertEqual(home(self.work, (TODO, MISSING, DONE, IGNORED), 0, now=at(2026, 11, 2, 10)), [])
+    def test_absences_are_in_the_sections_of_their_days(self):
+        now = at(2026, 11, 2, 10)
+        ahead = self.work.add_absence(date(2026, 11, 5), date(2026, 11, 6), start_min=540, end_min=1080)
+        today = self.work.add_absence(date(2026, 11, 2), start_min=540, end_min=1080)
+        past = self.work.add_absence(date(2026, 10, 20), start_min=540, end_min=1080)
+        gone = self.work.add_absence(date(2026, 11, 4), start_min=540, end_min=1080)
+        self.work.delete(gone)
+        listed = dict(home(self.work, (TODO, DONE), 0, now=now))
+        self.assertEqual([i[1]["uid"] for i in listed["next"]], [ahead])
+        self.assertEqual([i[1]["uid"] for i in listed["today"]], [today])
+        self.assertEqual([i[1]["uid"] for i in listed["earlier"]], [past])
+        self.assertEqual(listed["next"][0][1]["_display"], "ABSENCE")
+        # the default filters keep the past one out
+        self.assertNotIn("earlier", dict(home(self.work, now=now, window=0)))
 
     def test_home_and_startable(self):
         today = self.work.save_todo(None, "Oggi", client="lib", plan_date=date(2026, 11, 2), plan_min=900)

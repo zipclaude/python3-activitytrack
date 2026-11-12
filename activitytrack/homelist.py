@@ -81,6 +81,21 @@ def sections(todos, stopped, show, window, company=None, tag=None, carry_over_mi
         if not ours(e.get("companyUid")) or (tag and tag not in (e.get("tags") or [])):
             continue
         end_ms = ms(end)
+        if e.get("kind") == model.ABSENCE:
+            # by its days: ahead "next", covering today "today", over "earlier" (shown with the to-dos
+            # while it is not over, else with the done ones)
+            first = datetime.fromtimestamp((e.get("_startMs") or end_ms) / 1000, tz)
+            live = end >= start_today
+            if (TODO if live else DONE) not in show or (ahead is not None and first > ahead) \
+                    or (not live and behind is not None and end < behind):
+                continue
+            if first.astimezone(tz).date() > today:
+                groups["next"].append(((ms(first),), ("entry", e, end)))
+            elif live:
+                groups["today"].append((("0", ms(first)), ("entry", e, end)))
+            else:
+                groups["earlier"].append(((-end_ms,), ("entry", e, end)))
+            continue
         if e.get("_display") == model.INCOMPLETE:
             if MISSING in show:
                 groups["missing"].append(((-end_ms,), ("entry", e, end)))
@@ -124,9 +139,11 @@ def home(work, show=DEFAULT_SHOW, window=-1, company=None, tag=None, now=None):
     todos = all_todos(work) if work.policy.feature("todos") else []
     stopped = []
     for e in work.entries():
-        if e.get("status") == CLOSED and e.get("kind") != model.ABSENCE and work.real_segments(e["uid"]):
+        if e.get("status") == CLOSED and work.real_segments(e["uid"]):
             end = work.last_boundary(e["uid"])
             shown = dict(e, _display=work.display(e)[0])
+            if e.get("kind") == model.ABSENCE:
+                shown["_startMs"] = min(s["startUtcMs"] for s in work.real_segments(e["uid"]))
             stopped.append((shown, datetime.fromtimestamp((end or e.get("updatedUtcMs") or 0) / 1000, tz)))
     carry = work.policy.setting("carryOverMin", 360)
     return sections(todos, stopped, set(show), window, company, tag, carry, now or datetime.now(tz), tz,

@@ -29,8 +29,8 @@ class PlanTest(unittest.TestCase):
 
     def test_late_and_displayed_state(self):
         block = {"planDate": "2026-11-02", "planStartMin": 900, "durationMin": 30}
-        block, whole, due = [dict(x, status="TODO") for x in (block, {"planDate": "2026-11-02"},
-                                                             {"dueDate": "2026-11-01"})]
+        plans = (block, {"planDate": "2026-11-02"}, {"dueDate": "2026-11-01"})
+        block, whole, due = [dict(x, status="TODO") for x in plans]
         self.assertFalse(is_late(block, [], at(2026, 11, 2, 15, 30), ROME))
         self.assertTrue(is_late(block, [], at(2026, 11, 2, 15, 31), ROME))
         # a whole day is over from the next day

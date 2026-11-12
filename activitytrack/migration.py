@@ -55,7 +55,7 @@ ABSENCE_LABELS = {
     "LEAVE": ["Permesso", "Leave", "Freistellung", "Permiso"],
     "SICK": ["Malattia", "Sick leave", "Krankheit", "Enfermedad"],
 }
-_LABEL_TO_KIND = {l.casefold(): k for k, ls in ABSENCE_LABELS.items() for l in ls}
+_LABEL_TO_KIND = {lbl.casefold(): k for k, ls in ABSENCE_LABELS.items() for lbl in ls}
 
 _URL_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*://\S+$")
 _UUID_RE = re.compile(r"^\{?[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\}?$")
@@ -338,7 +338,6 @@ def migrate(rows, zone="Europe/Rome"):
     for r in legacy:
         kind = r["kind"]
         ed, tmin = r["date_epoch_day"], r.get("time_min")
-        ivs = working_intervals(ed) if ed not in days_off else []
         sched = sorted(schedule.get(_day(ed).isoweekday(), []))
         first = min((a for a, _ in sched), default=0)  # as the 20 -> 21 migration: no schedule = 0..1440
         last = max((b for _, b in sched), default=1440)

@@ -103,8 +103,8 @@ class RoundingTest(unittest.TestCase):
         # a zone off by 5:45: the quarter hours are those of its clock
         kathmandu = ZoneInfo("Asia/Kathmandu")
         t = int(datetime(2026, 11, 11, 10, 7, tzinfo=kathmandu).timestamp() * 1000)
-        self.assertEqual(model.round_down(t, 15, kathmandu), int(datetime(2026, 11, 11, 10, tzinfo=kathmandu)
-                                                                  .timestamp() * 1000))
+        expected = int(datetime(2026, 11, 11, 10, tzinfo=kathmandu).timestamp() * 1000)
+        self.assertEqual(model.round_down(t, 15, kathmandu), expected)
 
     def test_legacy_priority(self):
         got = [model.priority_of_legacy(v) for v in (1, 2, 3, 4, 5, None, "", 6, 99, 0, -1)]

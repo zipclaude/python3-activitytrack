@@ -134,6 +134,7 @@ def todo_when(t, tz):
 # what a server of the wire schema 3 answers to an older client (ACTIVITY-MODEL.md §6)
 UPGRADE_REQUIRED = _("Aggiorna l'app per sincronizzare")
 
+
 def pair_error(code):
     """What a refused pairing says (pairing.PairError.code)."""
     from . import pairing

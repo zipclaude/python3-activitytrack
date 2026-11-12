@@ -19,6 +19,9 @@ Rules-Requires-Root: no
 Package: python3-activitytrack
 Architecture: all
 Depends: ${misc:Depends}, ${python3:Depends}
+Breaks: activitytrack-cli (<< 1.0.0~alfa-1),
+ activitytrack-tui (<< 1.0.0~alfa-1),
+ activitytrack-desktop (<< 1.0.0~alfa-1)
 Description: ActivityTrack on the PC - rules, local copy and sync (Python 3)
  ActivityTrack records the work of freelancers and technicians: activities,
  travels, pauses and to-dos, on the Android app, on a web server of one's

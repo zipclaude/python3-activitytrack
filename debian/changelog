@@ -1,3 +1,16 @@
+python-activitytrack (1.0.0~alfa-1-1) unstable; urgency=medium
+
+  * ALPHA pre-release of 1.0 (tag v1.0.0-alfa-1). Synchronisation requires the
+    server and every device to be on 1.0 (wire schema 3: older apps are told
+    to update). Existing data is migrated automatically and backups made by
+    older versions can still be restored.
+  * Library: activity model of 1.0 (states, priorities by name, bin,
+    absences, rounding of stored times), wire schema 3, interchange format 2
+    (version 1 files still imported; plugin names @activity and
+    activityClosed, the old ones are read).
+
+ -- ActivityTrack <flavio-claude@zipman.it>  Thu, 12 Nov 2026 12:31:24 +0000
+
 python-activitytrack (0.9.9-1) unstable; urgency=medium
 
   * Release 0.9.9, in step with ActivityTrack 0.9.9: the PC learns of newer

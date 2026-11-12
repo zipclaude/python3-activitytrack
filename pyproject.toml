@@ -22,4 +22,4 @@ packages = ["activitytrack"]
 activitytrack = ["locale/*.json"]
 
 [tool.setuptools.dynamic]
-version = { attr = "activitytrack.__version__" }
+version = { attr = "activitytrack.__pep440__" }

@@ -762,9 +762,11 @@ class AbsenceTest(unittest.TestCase):
         uid = self.work.add_absence(date(2026, 11, 12), date(2026, 11, 17), start_min=600, end_min=720,
                                     absence_kind="LEAVE")
         self.assertEqual(self.segs(uid), [("12 10:00", "12:00"), ("13 10:00", "12:00"), ("16 10:00", "12:00")])
-        with self.assertRaises(WorkError) as err:
-            self.work.add_absence(date(2026, 11, 14), start_min=600, end_min=720)
-        self.assertEqual(err.exception.code, "no_working_days")
+        # a single day with times is taken as chosen (as the app and the server): a Saturday, a day off
+        sat = self.work.add_absence(date(2026, 11, 14), start_min=600, end_min=720)
+        self.assertEqual(self.segs(sat), [("14 10:00", "12:00")])
+        off = self.work.add_absence(date(2026, 11, 17), start_min=600, end_min=720)
+        self.assertEqual(self.segs(off), [("17 10:00", "12:00")])
 
     def test_without_any_schedule_only_the_days_off_are_skipped(self):
         for r in self.store.all("workSchedule"):

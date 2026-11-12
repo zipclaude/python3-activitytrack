@@ -311,16 +311,18 @@ def absence_segments(first, last, tz, schedule, lunch, days_off=frozenset(), sta
     [(start ms, end ms)] of an absence from [first] to [last]: one segment a day with a start and an
     end time, else one per working window of the day; either way the days off and the days without a
     schedule are skipped (owner, 2026-11-11: with times too; a schedule that is empty altogether
-    skips nothing but the days off).
+    skips nothing but the days off), except a single day with times, taken as chosen (a permesso on
+    a Saturday), as the app's AbsencePlanner and the server.
     """
     out = []
+    single = first == last
     for day in absence_days(first, last):
-        if day in days_off:
-            continue
         if start_min is not None and end_min is not None:
-            if schedule and not working_windows(day, schedule, ()):
+            if not single and (day in days_off or (schedule and not working_windows(day, schedule, ()))):
                 continue
             windows = [(start_min, end_min)]
+        elif day in days_off:
+            continue
         else:
             windows = working_windows(day, schedule, lunch)
         out += [(to_ms(at_minute(day, s, tz)), to_ms(at_minute(day, e, tz))) for s, e in windows]

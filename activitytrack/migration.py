@@ -285,6 +285,8 @@ def migrate(rows, zone="Europe/Rome"):
                 t["uid"], t["created_utc_ms"], t["updated_utc_ms"], company_id=t.get("company_id"),
                 client_id=t.get("client_id"), activity=None if _blank(t.get("title")) else t["title"],
                 notes=t.get("notes"), status="CLOSED", kind="ABSENCE", absence_kind=absence_kind(t.get("title")),
+                # an ignored absence goes to the bin, as an ignored task does (the server's rule)
+                deleted_utc_ms=t.get("ignored_utc_ms"),
             )
             new_entries.append(a)
             absence_segments(a, t["uid"], t.get("plan_epoch_day"), t.get("plan_end_epoch_day"),
@@ -358,6 +360,17 @@ def migrate(rows, zone="Europe/Rome"):
         absence_segments(a, uid, ed, ed, start, dur)
         mine = [s for s in new_segments if s["entry_id"] == a["id"]]
         a["closed_utc_ms"] = max(s["end_utc_ms"] for s in mine) if mine else None
+
+    # ---- external_key is unique with the company (the server's rule) -----------------------------
+    # on a clash the earliest created activity (then the lower uid) keeps the key, the others lose it
+    seen = set()
+    for n in sorted(out_entries + new_entries, key=lambda n: (n["created_utc_ms"], n["uid"])):
+        if n.get("external_key") is None:
+            continue
+        k = (n.get("company_id"), n["external_key"])
+        if k in seen:
+            n["external_key"] = None
+        seen.add(k)
 
     # ---- assemble --------------------------------------------------------------------------
     for n in out_entries:

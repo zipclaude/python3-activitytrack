@@ -1087,6 +1087,69 @@
 					{"entry_uid": "c34-t8", "kind": "TICKET", "uid": "84bf7dba-9d67-5f2c-8700-9e31ce0f7e65", "value": "INC-9"}
 				]
 			}
+		},
+		{
+			"name": "an ignored absence to-do goes to the bin",
+			"zone": "Europe/Rome",
+			"before": {
+				"todo": [
+					{"created_utc_ms": 1793606400000, "done": 0, "id": 1, "ignored_utc_ms": 1793606403000, "kind": "ABSENCE", "plan_epoch_day": 20775, "refs": "", "title": "Ferie", "uid": "c35-t1", "updated_utc_ms": 1793606401000}
+				],
+				"work_schedule": [
+					{"day_of_week": 1, "end_min": 1080, "start_min": 540},
+					{"day_of_week": 2, "end_min": 1080, "start_min": 540},
+					{"day_of_week": 3, "end_min": 1080, "start_min": 540},
+					{"day_of_week": 4, "end_min": 1080, "start_min": 540},
+					{"day_of_week": 5, "end_min": 1080, "start_min": 540}
+				],
+				"lunch_break": [
+					{"day_of_week": 1, "end_min": 840, "start_min": 750},
+					{"day_of_week": 2, "end_min": 840, "start_min": 750},
+					{"day_of_week": 3, "end_min": 840, "start_min": 750},
+					{"day_of_week": 4, "end_min": 840, "start_min": 750},
+					{"day_of_week": 5, "end_min": 840, "start_min": 750}
+				]
+			},
+			"after": {
+				"time_entry": [
+					{"absence_kind": "HOLIDAY", "activity": "Ferie", "closed_utc_ms": 1795021200000, "created_utc_ms": 1793606400000, "deleted_utc_ms": 1793606403000, "kind": "ABSENCE", "needs_review": 0, "priority": 0, "status": "CLOSED", "uid": "c35-t1", "unanswered_reminders": 0, "updated_utc_ms": 1793606401000, "zone_id": "Europe/Rome"}
+				],
+				"segment": [
+					{"end_utc_ms": 1795001400000, "entry_uid": "c35-t1", "kind": "ABSENCE", "planned": 0, "source": "MANUAL", "start_utc_ms": 1794988800000, "uid": "3b5f5730-0647-517a-8855-0f30b2203834", "zone_id": "Europe/Rome"},
+					{"end_utc_ms": 1795021200000, "entry_uid": "c35-t1", "kind": "ABSENCE", "planned": 0, "source": "MANUAL", "start_utc_ms": 1795006800000, "uid": "31699589-0f3f-587c-a886-5f06fa8eb643", "zone_id": "Europe/Rome"}
+				],
+				"external_ref": []
+			}
+		},
+		{
+			"name": "external_key unique with the company: the earliest created activity keeps it, the others lose it",
+			"zone": "Europe/Rome",
+			"before": {
+				"time_entry": [
+					{"company_id": 1, "created_utc_ms": 1793606401000, "id": 1, "status": "CLOSED", "todo_id": 2, "uid": "c36-e1", "updated_utc_ms": 1793610000001, "zone_id": "Europe/Rome"}
+				],
+				"segment": [
+					{"end_utc_ms": 1793696400000, "entry_id": 1, "id": 1, "kind": "WORK", "source": "TRACKED", "start_utc_ms": 1793692800000, "uid": "seg-1", "zone_id": "Europe/Rome"}
+				],
+				"todo": [
+					{"created_utc_ms": 1793606400100, "done": 0, "external_key": "K-7", "id": 1, "refs": "", "title": "Senza azienda", "uid": "c36-t1", "updated_utc_ms": 1793606401000},
+					{"company_id": 2, "created_utc_ms": 1793606400200, "done": 1, "done_utc_ms": 1793606409000, "external_key": "K-8", "id": 2, "refs": "", "title": "Assorbita", "uid": "c36-t2", "updated_utc_ms": 1793606401000},
+					{"created_utc_ms": 1793606400050, "done": 0, "external_key": "K-7", "id": 3, "refs": "", "title": "Stessa chiave", "uid": "c36-t3", "updated_utc_ms": 1793606401000},
+					{"company_id": 1, "created_utc_ms": 1793606400005, "done": 0, "external_key": "K-8", "id": 4, "refs": "", "title": "Stessa chiave, dopo", "uid": "c36-t4", "updated_utc_ms": 1793606401000}
+				]
+			},
+			"after": {
+				"time_entry": [
+					{"activity": "Assorbita", "closed_utc_ms": 1793696400000, "company_id": 1, "created_utc_ms": 1793606401000, "kind": "ACTIVITY", "needs_review": 0, "priority": 0, "status": "CLOSED", "uid": "c36-e1", "unanswered_reminders": 0, "updated_utc_ms": 1793610000001, "zone_id": "Europe/Rome"},
+					{"activity": "Senza azienda", "created_utc_ms": 1793606400100, "kind": "ACTIVITY", "needs_review": 0, "priority": 0, "status": "TODO", "uid": "c36-t1", "unanswered_reminders": 0, "updated_utc_ms": 1793606401000, "zone_id": "Europe/Rome"},
+					{"activity": "Stessa chiave", "created_utc_ms": 1793606400050, "external_key": "K-7", "kind": "ACTIVITY", "needs_review": 0, "priority": 0, "status": "TODO", "uid": "c36-t3", "unanswered_reminders": 0, "updated_utc_ms": 1793606401000, "zone_id": "Europe/Rome"},
+					{"activity": "Stessa chiave, dopo", "company_id": 1, "created_utc_ms": 1793606400005, "external_key": "K-8", "kind": "ACTIVITY", "needs_review": 0, "priority": 0, "status": "TODO", "uid": "c36-t4", "unanswered_reminders": 0, "updated_utc_ms": 1793606401000, "zone_id": "Europe/Rome"}
+				],
+				"segment": [
+					{"end_utc_ms": 1793696400000, "entry_uid": "c36-e1", "kind": "WORK", "planned": 0, "source": "TRACKED", "start_utc_ms": 1793692800000, "uid": "seg-1", "zone_id": "Europe/Rome"}
+				],
+				"external_ref": []
+			}
 		}
 	]
 }

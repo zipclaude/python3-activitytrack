@@ -47,10 +47,10 @@ NOTICES = {"end_moved": _("La fine dell'attività precedente è stata anticipata
 SECTIONS = {
     "overdue": _("In ritardo"), "missing": _("Dettagli mancanti"), "today": _("Oggi"),
     "next": _("Prossimi giorni"), "earlier": _("Giorni precedenti"), "no_date": _("Senza data"),
-    "ignored": _("Eliminate"),
+    "ignored": _("Cestino"),
 }
 WINDOWS = {-1: _("Oggi"), 24: _("24 h"), 72: _("3 gg"), 168: _("7 gg"), 720: _("30 gg"), 0: _("Tutti")}
-SHOWS = {"TODO": _("Da fare"), "MISSING": _("Dettagli mancanti"), "DONE": _("Fatte"), "IGNORED": _("Eliminate")}
+SHOWS = {"TODO": _("Da fare"), "MISSING": _("Dettagli mancanti"), "DONE": _("Fatte"), "IGNORED": _("Cestino")}
 
 ERRORS = {
     "client_required": _("Serve il cliente (o un viaggio)."),

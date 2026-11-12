@@ -44,8 +44,8 @@ class WorkError(Exception):
         self.detail = detail
 
 
-def local_zone():
-    """The system's IANA time zone (the interface passes Qt's, which knows Windows too)."""
+def system_zone():
+    """The system's IANA time zone when it names one (TZ, /etc/localtime); None elsewhere (Windows)."""
     tz = os.environ.get("TZ", "").lstrip(":")
     if tz and "/" in tz:
         return tz
@@ -55,7 +55,12 @@ def local_zone():
             return target.split("zoneinfo/", 1)[1]
     except OSError:
         pass
-    return "UTC"
+    return None
+
+
+def local_zone():
+    """The system's IANA time zone, else UTC (the interface passes Qt's, which knows Windows too)."""
+    return system_zone() or "UTC"
 
 
 def new_uid():
@@ -385,10 +390,11 @@ class Work:
         live = {e["uid"] for e in self.entries()}
         for s in self.store.all("segment"):
             end = s.get("endUtcMs")
-            if (s.get("entryUid") in live and end is not None and end > now and end > when
+            # only a real overlap: a segment that starts after [when] keeps its end
+            if (s.get("entryUid") in live and end is not None and end > now
+                    and (s.get("startUtcMs") or 0) <= when < end
                     and s.get("kind") != ABSENCE and not model.is_planned(s)):
-                # not before its own start
-                self.store.write("segment", s["uid"], {"endUtcMs": max(when, s["startUtcMs"])}, now)
+                self.store.write("segment", s["uid"], {"endUtcMs": when}, now)
                 self.notices.append(("end_moved", s["entryUid"]))
 
     # ---- commands ----
@@ -645,6 +651,9 @@ class Work:
         if not completed:
             self.switch(uid, TRAVEL, at)
             return uid
+        # the new anonymous activity is a start like any other
+        if self.policy.planned_only:
+            raise WorkError("planned_only")
         now = self.clock()
         when = self._instant(uid, now, at, False, _SWITCH, WORK, TRAVEL)
         self._step(uid, STOP, at=when)

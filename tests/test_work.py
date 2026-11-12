@@ -605,6 +605,27 @@ class FutureAndNoticesTest(unittest.TestCase):
         # a suspended pause may be suspended too (the machine allows it), and its end is never before its start
         self.assertEqual(transition(RUNNING, PAUSE, SUSPEND), (RUNNING, None, True, None))
 
+    def test_a_past_start_leaves_an_end_ahead_that_starts_after_it(self):
+        # an activity closed with an end ahead (10:40), started at 10:00; another typed from 9:00 to now
+        a = self.start(start_ms=at(10))
+        self.work.stop(a, at=at(10, 40), exact=True)
+        self.now = at(10, 20)
+        self.start(start_ms=at(9))
+        # no overlap at 9:00: the end stays, the segment is not cut to nothing
+        self.assertEqual(self.work.segments(a)[0]["endUtcMs"], at(10, 40))
+        self.assertEqual(self.work.notices, [])
+
+    def test_travel_from_work_starts_nothing_new_with_planned_only(self):
+        uid = self.start(start_ms=at(9))
+        self.now = at(10)
+        self.work.policy = policy(entries={"source": "plannedOnly"})
+        with self.assertRaises(WorkError) as err:
+            self.work.travel_from_work(uid, True)
+        self.assertEqual(err.exception.code, "planned_only")
+        self.assertEqual(self.store.get("entry", uid)["status"], RUNNING)
+        # the same activity may still travel
+        self.assertEqual(self.work.travel_from_work(uid, False), uid)
+
     def test_travel_back_switches_or_resumes(self):
         uid = self.start(start_ms=at(8))
         self.now = at(9)

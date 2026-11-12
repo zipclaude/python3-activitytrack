@@ -79,8 +79,14 @@ class SyncEngine:
     def sync(self):
         result = Result()
         try:
+            # what an older process sharing the folder wrote after the store migration
+            result.errors += self.store.legacy_pending()
             for _ in range(3):
+                # the realignment after the store migration (store.py): the changes not pushed yet take
+                # this sync's time, so they win over the fields the server's migration stamped
+                self.store.restamp(self.clock())
                 out = self._push(result.errors)
+                self.store.restamped()
                 came = self._pull(result.errors)
                 result.pushed += out
                 result.pulled += came
@@ -166,6 +172,8 @@ class SyncEngine:
                 self.store.set_state("cursor", cursor)
             count += len(records)
             if answer.get("more") is not True:
+                # a pull from 0 after the store migration is over: what the server lacks goes
+                self.store.realigned()
                 return count
         return count
 
@@ -205,7 +213,7 @@ class Runner:
         engine = SyncEngine(store, http)
         head = None
         try:
-            if not full and not store.has_pending():
+            if not full and not store.has_pending() and not store.realigning():
                 head = engine.head()
                 self.update(head)
                 if head.get("rev") == store.cursor:

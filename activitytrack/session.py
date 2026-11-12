@@ -14,14 +14,15 @@ from .vault import Vault
 
 
 class Session:
-    def __init__(self, folder, allow_http=False, use_keyring=True):
+    def __init__(self, folder, allow_http=False, use_keyring=True, zone=None):
         self.folder = Path(folder)
         self.folder.mkdir(parents=True, exist_ok=True)
         if os.name == "posix":
             self.folder.chmod(0o700)
         # http:// servers only for development (--dev)
         self.allow_http = allow_http
-        self.store = Store(self.folder / "activitytrack.sqlite3")
+        # [zone]: the interface's IANA zone, for a store migration (Store); None: the system's
+        self.store = Store(self.folder / "activitytrack.sqlite3", zone=zone)
         self.vault = Vault(self.folder, use_keyring=use_keyring)
 
     @property

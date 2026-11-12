@@ -296,9 +296,11 @@ def migrate(rows, zone="Europe/Rome"):
             continue
         running = any(n["status"] == "RUNNING" for n in linked)
         todo_fields = dict(
-            external_key=t.get("external_key"), due_epoch_day=t.get("due_epoch_day"),
-            due_time_min=t.get("due_time_min"), plan_epoch_day=t.get("plan_epoch_day"),
-            plan_start_min=t.get("plan_start_min"), duration_min=t.get("duration_min"),
+            # a blank key is no key (the server's rule): it would clash with the other blank ones
+            external_key=None if _blank(t.get("external_key")) else t["external_key"],
+            due_epoch_day=t.get("due_epoch_day"), due_time_min=t.get("due_time_min"),
+            plan_epoch_day=t.get("plan_epoch_day"), plan_start_min=t.get("plan_start_min"),
+            duration_min=t.get("duration_min"),
             plan_reminded_utc_ms=t.get("plan_reminded_utc_ms"), priority=map_priority(t.get("priority")),
         )
         if not linked or not (done or running):
@@ -365,7 +367,8 @@ def migrate(rows, zone="Europe/Rome"):
     # on a clash the earliest created activity (then the lower uid) keeps the key, the others lose it
     seen = set()
     for n in sorted(out_entries + new_entries, key=lambda n: (n["created_utc_ms"], n["uid"])):
-        if n.get("external_key") is None:
+        if _blank(n.get("external_key")):
+            n["external_key"] = None
             continue
         k = (n.get("company_id"), n["external_key"])
         if k in seen:

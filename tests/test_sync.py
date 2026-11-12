@@ -26,16 +26,16 @@ class SyncTest(unittest.TestCase):
 
     def test_the_first_sync_pulls_everything(self):
         self.server.put("company", "c1", {"name": "Acme"}, central=True)
-        self.server.put("todo", "t1", {"title": "Call", "companyUid": "c1"})
+        self.server.put("tag", "t1", {"title": "Call", "companyUid": "c1"})
         result = self.engine.sync()
         self.assertEqual(result.pulled, 2)
-        self.assertEqual(self.store.get("todo", "t1")["title"], "Call")
+        self.assertEqual(self.store.get("tag", "t1")["title"], "Call")
         self.assertTrue(self.store.get("company", "c1")["_central"])
         self.assertEqual(self.store.cursor, 2)
         self.assertEqual(self.store.get_state("offset"), 5)
 
     def test_a_local_change_is_pushed_and_settled(self):
-        self.store.write("entry", "e1", {"activity": "Patch", "status": "ACTIVE"}, now_ms=900)
+        self.store.write("entry", "e1", {"activity": "Patch", "status": "RUNNING"}, now_ms=900)
         self.assertTrue(self.store.get("entry", "e1")["_pending"])
         self.assertEqual(self.store.pending_count(), 1)
         result = self.engine.sync()
@@ -46,7 +46,7 @@ class SyncTest(unittest.TestCase):
         self.assertEqual(self.server.records[("entry", "e1")]["clock"]["status"], 900)
         e = self.store.get("entry", "e1")
         self.assertFalse(e["_pending"])
-        self.assertEqual(e["status"], "ACTIVE")
+        self.assertEqual(e["status"], "RUNNING")
 
     def test_field_by_field_the_last_writer_wins(self):
         self.server.put("entry", "e1", {"activity": "A", "notes": "server"}, at=500)
@@ -68,42 +68,42 @@ class SyncTest(unittest.TestCase):
         self.assertEqual(self.store.change(self.store.pending(10)[0])["fields"], {"activity": "B"})
 
     def test_a_pull_does_not_hide_a_pending_field(self):
-        self.store.write("todo", "t1", {"title": "mine"}, now_ms=100)
-        self.store.pulled({"type": "todo", "uid": "t1", "rev": 3, "fields": {"title": "theirs", "notes": "n"}})
-        t = self.store.get("todo", "t1")
+        self.store.write("tag", "t1", {"title": "mine"}, now_ms=100)
+        self.store.pulled({"type": "tag", "uid": "t1", "rev": 3, "fields": {"title": "theirs", "notes": "n"}})
+        t = self.store.get("tag", "t1")
         self.assertEqual((t["title"], t["notes"]), ("mine", "n"))
 
     def test_deletes(self):
-        self.server.put("todo", "t1", {"title": "x"})
+        self.server.put("tag", "t1", {"title": "x"})
         self.engine.sync()
-        self.store.delete("todo", "t1", now_ms=100)
-        self.assertIsNone(self.store.get("todo", "t1"))
+        self.store.delete("tag", "t1", now_ms=100)
+        self.assertIsNone(self.store.get("tag", "t1"))
         self.engine.sync()
-        self.assertTrue(self.server.records[("todo", "t1")]["deleted"])
+        self.assertTrue(self.server.records[("tag", "t1")]["deleted"])
         self.assertFalse(self.store.has_pending())
         # a record the server never had just disappears
-        self.store.write("todo", "t2", {"title": "y"}, now_ms=100)
-        self.store.delete("todo", "t2", now_ms=110)
+        self.store.write("tag", "t2", {"title": "y"}, now_ms=100)
+        self.store.delete("tag", "t2", now_ms=110)
         self.assertFalse(self.store.has_pending())
 
     def test_a_record_deleted_there_drops_the_change_here(self):
-        self.server.put("todo", "t1", {"title": "x"})
+        self.server.put("tag", "t1", {"title": "x"})
         self.engine.sync()
-        self.store.write("todo", "t1", {"title": "y"}, now_ms=100)
-        self.server.records[("todo", "t1")].update(deleted=True, fields={})
+        self.store.write("tag", "t1", {"title": "y"}, now_ms=100)
+        self.server.records[("tag", "t1")].update(deleted=True, fields={})
         self.server.rev += 1
-        self.server.records[("todo", "t1")]["rev"] = self.server.rev
+        self.server.records[("tag", "t1")]["rev"] = self.server.rev
         self.engine.sync()
-        self.assertIsNone(self.store.get("todo", "t1"))
+        self.assertIsNone(self.store.get("tag", "t1"))
         self.assertFalse(self.store.has_pending())
 
     def test_a_record_out_of_scope_goes(self):
-        self.server.put("todo", "t1", {"title": "x"})
+        self.server.put("tag", "t1", {"title": "x"})
         self.engine.sync()
-        self.server.leave("todo", "t1")
+        self.server.leave("tag", "t1")
         self.engine.sync()
-        self.assertIsNone(self.store.get("todo", "t1"))
-        self.assertEqual(self.store.all("todo"), [])
+        self.assertIsNone(self.store.get("tag", "t1"))
+        self.assertEqual(self.store.all("tag"), [])
 
     def test_a_refused_change_stays_and_is_listed(self):
         self.server.refuse.add("company")
@@ -128,7 +128,7 @@ class SyncTest(unittest.TestCase):
             f"sync/pull?cursor=0&limit={sync.BATCH}", f"sync/pull?cursor={sync.BATCH}&limit={sync.BATCH}"])
 
     def test_revoked_and_incompatible(self):
-        self.store.write("todo", "t1", {"title": "x"}, now_ms=100)
+        self.store.write("tag", "t1", {"title": "x"}, now_ms=100)
         self.server.status = 401
         with self.assertRaises(SyncRevoked):
             self.engine.sync()
@@ -222,7 +222,7 @@ class RunnerTest(unittest.TestCase):
         self.server.update = '{"payload": "x"}'
         r.run()
         self.assertEqual(self.store.get_state("update.manifest"), '{"payload": "x"}')
-        self.server.put("todo", "t1", {"title": "x"})
+        self.server.put("tag", "t1", {"title": "x"})
         r.run(full=False)
         self.assertEqual(self.store.get_state("update.manifest"), '{"payload": "x"}')
         # an older server says nothing: what is there stays; a null or an absurd value clears it
@@ -246,7 +246,7 @@ class RunnerTest(unittest.TestCase):
         from activitytrack.sync import Runner
         r = Runner(_Session(self.store, self.server))
         r.run()
-        self.server.put("todo", "t1", {"title": "x"})
+        self.server.put("tag", "t1", {"title": "x"})
         before = len(self.server.requests)
         # nothing pending, the revision moved: the head that tells so is the one that tells of the update
         self.assertEqual(("ok", ""), r.run(full=False))
@@ -261,7 +261,7 @@ class RunnerTest(unittest.TestCase):
         from activitytrack.sync import Runner
         self.assertEqual(Runner(_Session(self.store, None)).run(), ("unpaired", ""))
         r = Runner(_Session(self.store, self.server))
-        self.server.put("todo", "t1", {"title": "x"})
+        self.server.put("tag", "t1", {"title": "x"})
         self.assertEqual(r.run(full=False), ("ok", ""))
         # nothing moved: head only
         self.assertEqual(r.run(full=False), ("idle", ""))

@@ -3,11 +3,18 @@ import copy
 import json
 import os
 import tempfile
+import time
 import unittest
+from datetime import datetime
 from pathlib import Path
+from unittest import mock
+from zoneinfo import ZoneInfo
 
 from activitytrack import migration as m
 from activitytrack.store import MODEL, Store
+from activitytrack.sync import SyncEngine, SyncFailed
+
+from .fake_server import FakeServer
 
 DATA = Path(__file__).with_name("data")
 DOC = json.loads((DATA / "activity-migration.json").read_text(encoding="utf-8"))
@@ -111,6 +118,21 @@ class RecordCasesTest(unittest.TestCase):
         from activitytrack import model
         for p in (None, 1, 2, 3, 4, 5, 6, 99, 0, -1):
             self.assertEqual(m.map_priority(p), model.priority_of_legacy(p))
+
+
+class BlankKeyTest(unittest.TestCase):
+    def test_a_blank_external_key_is_no_key(self):
+        todo = {"title": "x", "done": False, "createdUtcMs": 1, "updatedUtcMs": 1, "kind": "TASK"}
+        out = m.migrate_records({"todo": {"a": dict(todo, externalKey=""), "b": dict(todo, externalKey=" "),
+                                          "c": dict(todo, externalKey="K")}})
+        self.assertEqual({u: f["externalKey"] for u, f in out["entry"].items()}, {"a": None, "b": None, "c": "K"})
+
+    def test_a_blank_key_from_the_server_is_none(self):
+        with tempfile.TemporaryDirectory() as d:
+            s = Store(Path(d) / "s.sqlite3")
+            s.pulled({"type": "entry", "uid": "e", "rev": 1, "fields": {"status": "TODO", "externalKey": ""}})
+            self.assertIsNone(s.get("entry", "e")["externalKey"])
+            s.close()
 
 
 class StoreMigrationTest(unittest.TestCase):
@@ -225,6 +247,8 @@ class StoreMigrationTest(unittest.TestCase):
         pending = [(r["type"], r["uid"], r["op"]) for r in s.pending(100)]
         self.assertNotIn("todo", [p[0] for p in pending])
         self.assertIn(("entry", "e1", "delete"), pending)
+        # within a type the deletes first: what they free (an external key) is there for the upserts
+        self.assertLess(pending.index(("entry", "e1", "delete")), pending.index(("entry", "e2", "upsert")))
         self.assertLess(pending.index(("entry", "new", "upsert")), pending.index(("segment", "snew", "upsert")))
         change = {c["uid"]: c for c in map(s.change, s.pending(100)) if c["type"] == "entry" and c["op"] == "upsert"}
         self.assertEqual(change["e2"]["fields"]["status"], "CLOSED")
@@ -232,6 +256,101 @@ class StoreMigrationTest(unittest.TestCase):
         self.assertNotIn("activity", change["e2"]["fields"])
         self.assertEqual(change["new"]["fields"]["kind"], "ACTIVITY")
         self.assertEqual(set(change["e2"]["times"]), set(change["e2"]["fields"]))
+
+    def test_the_realignment_pushes_the_local_changes_and_drops_what_the_server_lacks(self):
+        s = self.store
+        s.write("entry", "e2", {"notes": "scritta"}, 1000)
+        s.write("todo", "t1", {"title": "Ticket 2"}, 1000)
+        s = self.reopen()
+        self.assertTrue(s.get_state("realign"))
+        self.assertTrue(s.realigning())
+        hour = 3_600_000
+        later = int(time.time() * 1000) + hour
+        clock = later + hour
+        server = FakeServer(now=lambda: clock)
+        # the server migrated its copy after this store did, stamping every field with its own time; t2 is
+        # not there (on the server another activity absorbed it), nor anything derived from it
+        for r in s.db.execute("SELECT type, uid, fields FROM record WHERE type IN ('entry', 'segment', 'externalRef')"):
+            if r["uid"] != "t2":
+                server.put(r["type"], r["uid"], json.loads(r["fields"]), at=later)
+        server.put("entry", "e2", {"notes": "dal server"}, at=later)
+        engine = SyncEngine(s, server, clock=lambda: clock)
+        # a sync that fails leaves the realignment to do
+        server.status = 503
+        with self.assertRaises(SyncFailed):
+            engine.sync()
+        self.assertTrue(s.get_state("realign"))
+        self.assertIsNotNone(s.get("entry", "t2"))
+        server.status = None
+        engine.sync()
+        # the local changes won, with the time of the sync
+        self.assertEqual(server.records[("entry", "e2")]["fields"]["notes"], "scritta")
+        self.assertEqual(server.records[("entry", "e2")]["clock"]["notes"], clock)
+        self.assertEqual(server.records[("entry", "t1")]["fields"]["activity"], "Ticket 2")
+        self.assertEqual((s.get("entry", "e2")["notes"], s.get("entry", "t1")["activity"]), ("scritta", "Ticket 2"))
+        # the server's version for the rest; no ghost of what it does not have
+        self.assertIsNone(s.get("entry", "t2"))
+        self.assertEqual(s.get("entry", "e1")["status"], "CLOSED")
+        self.assertEqual(s.get("client", "c1")["name"], "Acme")
+        self.assertEqual(s.pending_count(), 0)
+        self.assertFalse(s.get_state("realign"))
+        self.assertFalse(s.realigning())
+        # later syncs are as usual: a change carries its own time
+        s.write("entry", "e2", {"notes": "dopo"}, clock + 5)
+        engine.sync()
+        self.assertEqual(server.records[("entry", "e2")]["clock"]["notes"], clock + 5)
+
+    def test_a_ghost_with_a_local_change_stays(self):
+        s = self.reopen()
+        server = FakeServer(now=lambda: 10)
+        s.write("entry", "t2", {"notes": "mia"}, 5)
+        server.refuse.add("entry")
+        SyncEngine(s, server, clock=lambda: 10).sync()
+        # refused, not on the server: the change still holds it
+        self.assertEqual(s.get("entry", "t2")["notes"], "mia")
+        self.assertIsNone(s.get("entry", "e1"))
+        self.assertFalse(s.realigning())
+
+    def test_old_changes_written_after_the_migration(self):
+        s = self.reopen()
+        # an older process sharing the folder: a to-do, an entry stopped with the old statuses
+        s.write("todo", "old", {"title": "x"}, 2000)
+        s.write("entry", "e2", {"status": "TO_COMPLETE", "todoUid": "t1", "notes": "n"}, 2000)
+        with self.assertLogs("activitytrack.store", "WARNING"):
+            dropped = s.legacy_pending()
+        self.assertEqual(len(dropped), 1)
+        self.assertIn("todo old", dropped[0])
+        (change,) = [s.change(r) for r in s.pending(10)]
+        self.assertEqual(change["fields"], {"status": "CLOSED", "closedUtcMs": 2000, "notes": "n"})
+        self.assertEqual(set(change["times"]), set(change["fields"]))
+        self.assertEqual(s.legacy_pending(), [])
+
+    def test_the_zone_of_the_migration(self):
+        def absence_start(store):
+            (a,) = [e for e in store.all("entry") if e["kind"] == "ABSENCE"]
+            (seg,) = [x for x in store.all("segment") if x["entryUid"] == a["uid"]]
+            return seg["startUtcMs"]
+
+        def nine(zone):
+            return int(datetime(2026, 11, 9, 9, tzinfo=ZoneInfo(zone)).timestamp() * 1000)
+
+        self.store.close()
+        # the interface's zone
+        s = Store(self.path, zone="America/New_York")
+        self.addCleanup(s.close)
+        self.assertEqual(absence_start(s), nine("America/New_York"))
+
+    def test_without_a_zone_of_the_system_the_records_tell_it(self):
+        self.store.close()
+        # Windows: no IANA zone from the system; the entries were recorded in Rome
+        with mock.patch("activitytrack.work.system_zone", return_value=None):
+            s = Store(self.path)
+        self.addCleanup(s.close)
+        self.assertEqual(s.get_state("model"), MODEL)
+        (a,) = [e for e in s.all("entry") if e["kind"] == "ABSENCE"]
+        (seg,) = [x for x in s.all("segment") if x["entryUid"] == a["uid"]]
+        nine = datetime(2026, 11, 9, 9, tzinfo=ZoneInfo(self.ZONE))
+        self.assertEqual(seg["startUtcMs"], int(nine.timestamp() * 1000))
 
     def test_reset_keeps_the_model(self):
         self.reopen().reset()

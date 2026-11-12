@@ -25,11 +25,12 @@ class InputError(Exception):
 
 
 class App:
-    def __init__(self, folder, dev=False):
-        self.session = Session(folder, allow_http=dev)
+    def __init__(self, folder, dev=False, zone=None):
+        # [zone]: the user's IANA zone when the interface knows it better than the system; None: the system's
+        self.session = Session(folder, allow_http=dev, zone=zone)
         # dates and times as chosen on the desktop (Settings → Generale)
         formats.load(self.session.store)
-        self.work = Work(self.session.store, stored(self.session.store), zone=local_zone())
+        self.work = Work(self.session.store, stored(self.session.store), zone=zone or local_zone())
         self.runner = Runner(self.session)
         self.updates = Updates(self.session, self.runner, lambda: self.work.policy)
 

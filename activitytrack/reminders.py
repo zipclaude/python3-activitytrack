@@ -212,8 +212,8 @@ class Sources:
                 continue
             start, end, _all_day = plan
             # a point in time: its first hour
-            end = max(end, start + timedelta(hours=1))
-            if now < end:
+            end = max(end, model.from_ms(model.to_ms(start) + 3_600_000, tz), key=model.to_ms)
+            if model.to_ms(now) < model.to_ms(end):
                 r = reminded.get(t["uid"])
                 out.append((t["uid"], start, end, self._dt(r, tz) if r else None))
         return out

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 import tempfile
 import unittest
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -26,6 +26,15 @@ class PlanTest(unittest.TestCase):
         self.assertEqual(plan_bounds(block, ROME)[:2], (at(2026, 11, 2, 15), at(2026, 11, 2, 15, 30)))
         self.assertIsNone(plan_bounds({}, ROME))
         self.assertEqual(moment({"dueDate": "2026-11-05", "dueTimeMin": 600}, ROME), at(2026, 11, 5, 10))
+
+    def test_a_plan_lasts_its_elapsed_minutes(self):
+        # 2026-10-25: the clocks go back at 03:00, 01:30 + 120 minutes ends at 02:30 CET (01:30 UTC)
+        block = {"status": "TODO", "planDate": "2026-10-25", "planStartMin": 90, "durationMin": 120}
+        end = plan_bounds(block, ROME)[1]
+        self.assertEqual(int(end.timestamp() * 1000), 1_792_891_800_000)
+        for utc, late in (((0, 40), False), ((1, 29), False), ((1, 31), True)):
+            now = datetime(2026, 10, 25, *utc, tzinfo=timezone.utc).astimezone(ROME)
+            self.assertEqual(is_late(block, [], now, ROME), late, now)
 
     def test_late_and_displayed_state(self):
         block = {"planDate": "2026-11-02", "planStartMin": 900, "durationMin": 30}

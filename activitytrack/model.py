@@ -80,13 +80,15 @@ def plan_bounds(a, tz):
     if start_min is None:
         return at_minute(day, 0, tz), at_minute(day + timedelta(days=1), 0, tz), True
     start = at_minute(day, start_min, tz)
-    return start, start + timedelta(minutes=a.get("durationMin") or 0), False
+    # elapsed minutes, not wall-clock ones: the same on a day the clocks change
+    return start, from_ms(to_ms(start) + (a.get("durationMin") or 0) * 60_000, tz), False
 
 
 def plan_over(a, now, tz):
     """The plan is over: after its end, a whole-day plan from the next day (TodoPlan.over)."""
     plan = plan_bounds(a, tz)
-    return bool(plan) and (now >= plan[1] if plan[2] else now > plan[1])
+    # compared as instants: aware datetimes of one zone compare by their wall clock
+    return bool(plan) and (to_ms(now) >= to_ms(plan[1]) if plan[2] else to_ms(now) > to_ms(plan[1]))
 
 
 def due_overdue(a, now, tz):
@@ -98,7 +100,7 @@ def due_overdue(a, now, tz):
         limit = at_minute(due, a["dueTimeMin"], tz)
     else:
         limit = at_minute(due + timedelta(days=1), 0, tz)
-    return now > limit
+    return to_ms(now) > to_ms(limit)
 
 
 def moment(a, tz):

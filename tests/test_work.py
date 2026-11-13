@@ -731,6 +731,19 @@ class FutureAndNoticesTest(unittest.TestCase):
         self.assertEqual(texts.notice_text("return_removed"), "Il viaggio di ritorno previsto è stato rimosso.")
         self.assertEqual(texts.notice_text("segment_removed"), "Un tratto previsto è stato rimosso.")
 
+    def test_take_notices_gives_the_words_and_forgets(self):
+        a = self.start(start_ms=at(9))
+        self.work.stop(a, at=at(10, 40), exact=True)
+        self.now = at(10, 20)
+        self.start()
+        self.assertEqual(self.work.take_notices(),
+                         ["La fine di «x» è stata anticipata all'inizio della nuova attività."])
+        self.assertEqual((self.work.notices, self.work.take_notices()), ([], []))
+        # the same words are said once; a segment removed has no title in its text
+        self.work.notices = [("segment_removed", a), ("segment_removed", a), ("return_removed", a)]
+        self.assertEqual(self.work.take_notices(), ["Un tratto previsto è stato rimosso.",
+                                                    "Il viaggio di ritorno previsto è stato rimosso."])
+
     def test_travel_from_work_starts_nothing_new_with_planned_only(self):
         uid = self.start(start_ms=at(9))
         self.now = at(10)

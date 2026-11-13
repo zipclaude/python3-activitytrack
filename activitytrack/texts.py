@@ -43,7 +43,7 @@ ABSENCE_KINDS = {ABSENCE: _("Assenza"), "HOLIDAY": _("Ferie"), "LEAVE": _("Perme
 # what a command leaves to tell the user (Work.notices), and what a sync does (Store.notices: %s is the
 # activity's title, as typed)
 NOTICES = {
-    "end_moved": _("La fine dell'attività precedente è stata anticipata all'inizio di questa."),
+    "end_moved": _("La fine di «%s» è stata anticipata all'inizio della nuova attività."),
     # a segment wholly ahead the new start came before: a TRAVEL one (a declared return trip), another
     "return_removed": _("Il viaggio di ritorno previsto è stato rimosso."),
     "segment_removed": _("Un tratto previsto è stato rimosso."),

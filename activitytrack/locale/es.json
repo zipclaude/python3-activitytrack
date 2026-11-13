@@ -115,7 +115,7 @@
  "Ferie": "Vacaciones",
  "Permesso": "Permiso",
  "Malattia": "Enfermedad",
- "La fine dell'attività precedente è stata anticipata all'inizio di questa.": "El final de la actividad anterior se ha adelantado al inicio de esta.",
+ "La fine di «%s» è stata anticipata all'inizio della nuova attività.": "El final de «%s» se ha adelantado al inicio de la nueva actividad.",
  "Nel periodo non ci sono giorni lavorativi: indica un orario.": "No hay días laborables en el periodo: indica una hora.",
  "La priorità va da 0 a 5.": "La prioridad va de 0 a 5.",
  "Riapri": "Reabrir",

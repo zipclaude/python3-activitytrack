@@ -115,7 +115,7 @@
  "Ferie": "Urlaub",
  "Permesso": "Freistellung",
  "Malattia": "Krankheit",
- "La fine dell'attività precedente è stata anticipata all'inizio di questa.": "Das Ende der vorherigen Tätigkeit wurde auf den Beginn dieser vorverlegt.",
+ "La fine di «%s» è stata anticipata all'inizio della nuova attività.": "Das Ende von «%s» wurde auf den Beginn der neuen Tätigkeit vorverlegt.",
  "Nel periodo non ci sono giorni lavorativi: indica un orario.": "Im Zeitraum gibt es keine Arbeitstage: gib eine Uhrzeit an.",
  "La priorità va da 0 a 5.": "Die Priorität geht von 0 bis 5.",
  "Riapri": "Wieder öffnen",

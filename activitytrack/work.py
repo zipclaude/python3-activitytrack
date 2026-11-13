@@ -18,7 +18,7 @@ import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import model, timegrid
+from . import model, texts, timegrid
 from .model import (  # noqa: F401  (re-exported: the vocabulary is imported from here)
     ABSENCE, ABSENCE_KINDS, ACTIVITY, CLOSED, DEFAULT_QUANTA, FUTURE_CLOSE_MS, PAUSE, RUNNING, TODO, TRAVEL, WORK,
 )
@@ -162,6 +162,19 @@ class Work:
         self.round_stored = round_stored
         self.quanta = dict(DEFAULT_QUANTA, **(quanta or {}))
         self.notices = []
+
+    def take_notices(self):
+        """The pending notices of the commands as the user's words (texts.notice_text), in order and
+        without repeats, and forget them: the interface calls it after a command and shows what comes."""
+        out = []
+        for code, uid in self.notices:
+            entry = self.store.get("entry", uid) or {}
+            title = (entry.get("activity") or "").strip() or (entry.get("externalKey") or "").strip() or uid[:8]
+            text = texts.notice_text(code, title)
+            if text not in out:
+                out.append(text)
+        self.notices = []
+        return out
 
     @property
     def tz(self):

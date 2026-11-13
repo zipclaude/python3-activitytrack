@@ -115,7 +115,7 @@
  "Ferie": "Holiday",
  "Permesso": "Leave",
  "Malattia": "Sick leave",
- "La fine dell'attività precedente è stata anticipata all'inizio di questa.": "The end of the previous activity was moved back to the start of this one.",
+ "La fine di «%s» è stata anticipata all'inizio della nuova attività.": "The end of «%s» was moved back to the start of the new activity.",
  "Nel periodo non ci sono giorni lavorativi: indica un orario.": "There are no working days in the period: give a time.",
  "La priorità va da 0 a 5.": "The priority goes from 0 to 5.",
  "Riapri": "Reopen",

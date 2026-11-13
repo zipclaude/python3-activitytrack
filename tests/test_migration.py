@@ -305,15 +305,19 @@ class StoreMigrationTest(unittest.TestCase):
         engine.sync()
         self.assertEqual(server.records[("entry", "e2")]["clock"]["notes"], clock + 5)
 
-    def test_a_ghost_with_a_local_change_stays(self):
+    def test_a_ghost_with_a_local_change_goes_and_the_user_is_told(self):
         s = self.reopen()
         server = FakeServer(now=lambda: 10)
         s.write("entry", "t2", {"notes": "mia"}, 5)
-        server.refuse.add("entry")
-        SyncEngine(s, server, clock=lambda: 10).sync()
-        # refused, not on the server: the change still holds it
-        self.assertEqual(s.get("entry", "t2")["notes"], "mia")
+        with self.assertLogs("activitytrack.store", "WARNING"):
+            result = SyncEngine(s, server, clock=lambda: 10).sync()
+        # made by the migration, not on the server: a PC is no source of trust (issue #21), nothing pushed
+        self.assertEqual([c for _, path, body in server.requests if path == "sync/push" for c in body["changes"]], [])
+        self.assertIsNone(s.get("entry", "t2"))
         self.assertIsNone(s.get("entry", "e1"))
+        self.assertEqual(s.pending_count(), 0)
+        self.assertEqual([(n["code"], n["uid"], n["title"], n["fields"]) for n in result.notices],
+                         [("edit_dropped", "t2", "Chiamare", {"notes": "mia"})])
         self.assertFalse(s.realigning())
 
     def test_old_changes_written_after_the_migration(self):

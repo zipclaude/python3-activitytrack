@@ -6,6 +6,9 @@ from urllib.parse import parse_qs, urlsplit
 
 from activitytrack.net import Reply
 
+# what the server refuses a new `entry` without ("invalid")
+NEW_ENTRY_FIELDS = ("status", "zoneId", "createdUtcMs")
+
 
 class FakeServer:
     def __init__(self, now=lambda: 1_000_000):
@@ -98,6 +101,13 @@ class FakeServer:
                 results.append({"uid": c["uid"], "status": "conflict", "record": self.wire(key)})
                 continue
             if r is None:
+                # a new activity must come whole, as the real server checks it (a partial one is a
+                # change to a record it does not have)
+                missing = [k for k in NEW_ENTRY_FIELDS if c["type"] == "entry" and c["fields"].get(k) is None]
+                if missing:
+                    results.append({"uid": c["uid"], "status": "error", "error": "invalid",
+                                    "detail": ", ".join(missing)})
+                    continue
                 r = self.records[key] = {"deleted": False, "fields": {}, "clock": {}, "central": False}
             refused = False
             for k, v in c["fields"].items():

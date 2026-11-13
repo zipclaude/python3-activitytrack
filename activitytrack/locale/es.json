@@ -122,5 +122,6 @@
  "Cestino": "Papelera",
  "Ripristina": "Restaurar",
  "Fatto": "Hecho",
- "Elimina": "Eliminar"
+ "Elimina": "Eliminar",
+ "La modifica a «%s» non è stata applicata: il da fare è stato chiuso o avviato su un altro dispositivo.": "El cambio en «%s» no se ha aplicado: la tarea se cerró o se inició en otro dispositivo."
 }

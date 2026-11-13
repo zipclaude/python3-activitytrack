@@ -60,6 +60,8 @@ class Result:
     pushed: int = 0
     pulled: int = 0
     errors: list = field(default_factory=list)
+    # what to tell the user (Store.notices: a change to a ghost of the realignment, not applied)
+    notices: list = field(default_factory=list)
 
 
 def now_ms():
@@ -83,11 +85,13 @@ class SyncEngine:
             result.errors += self.store.legacy_pending()
             for _ in range(3):
                 # the realignment after the store migration (store.py): the changes not pushed yet take
-                # this sync's time, so they win over the fields the server's migration stamped
+                # this sync's time, so they win over the fields the server's migration stamped; those of the
+                # records the migration made from scratch wait for the pull (Store.held), which keeps them
+                # (pushed in the next round) or drops them (Store.realigned, issue #21)
                 self.store.restamp(self.clock())
                 out = self._push(result.errors)
                 self.store.restamped()
-                came = self._pull(result.errors)
+                came = self._pull(result.errors, result.notices)
                 result.pushed += out
                 result.pulled += came
                 # only refused changes left: another round would send them again
@@ -154,7 +158,7 @@ class SyncEngine:
                 return taken
         return taken
 
-    def _pull(self, errors):
+    def _pull(self, errors, notices=None):
         count = 0
         for _ in range(MAX_ROUNDS * 20):
             answer = self._call("GET", f"sync/pull?cursor={self.store.cursor}&limit={BATCH}")
@@ -173,7 +177,9 @@ class SyncEngine:
             count += len(records)
             if answer.get("more") is not True:
                 # a pull from 0 after the store migration is over: what the server lacks goes
-                self.store.realigned()
+                gone = self.store.realigned(self.clock())
+                if notices is not None:
+                    notices += gone
                 return count
         return count
 

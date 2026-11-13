@@ -22,7 +22,14 @@ app's (SyncEngine.kt, SyncStore.restamp):
   went through;
 - table `realign_record`: the records the migration wrote into the shadow; each one the server sends is
   struck off, and when the pull from 0 is over (`realigned`) those left, which the server does not have
-  (absorbed by another activity there, gone), are dropped unless a local change still holds them.
+  (absorbed by another activity there, gone), are dropped unless a local change still holds them;
+- table `realign_scratch`: those of them the migration made from scratch (the activities of to-dos and
+  absences, absence segments, references). The source of trust is the phone or the server, never a PC
+  (owner, issue #21): until the pull has struck them off, their pending changes, and those of the
+  records hanging from such an activity, are held back from the push (`pending`); those the server does
+  not send (ghosts: on the server the to-do was absorbed by an entry started or closed elsewhere) are
+  dropped with their pending changes, and for an activity that had one the user gets a notice with
+  what was typed (`notices`, kept in the state "sync.notices").
 """
 
 import logging
@@ -56,6 +63,10 @@ CREATE TABLE IF NOT EXISTS realign_record (
     type TEXT NOT NULL, uid TEXT NOT NULL,
     PRIMARY KEY (type, uid)
 );
+CREATE TABLE IF NOT EXISTS realign_scratch (
+    type TEXT NOT NULL, uid TEXT NOT NULL,
+    PRIMARY KEY (type, uid)
+);
 """
 
 # the data model the store holds: 1 is the activity model (wire schema 3); none before
@@ -64,6 +75,10 @@ MODEL = 1
 _ENTRY_CHILDREN = ("segment", "externalRef", "attachment", "expense", "entryMaterial")
 # an entry's statuses before the activity model, as migration.py maps them
 _LEGACY_STATUS = {"ACTIVE": "RUNNING", "SUSPENDED": "RUNNING", "TO_COMPLETE": "CLOSED"}
+# what the sync leaves to tell the user (texts.NOTICES): a change to a ghost of the realignment, not applied
+EDIT_DROPPED = "edit_dropped"
+# how long a notice of the sync is shown when the interface does not dismiss it
+NOTICE_DAYS = 7
 
 log = logging.getLogger(__name__)
 
@@ -164,6 +179,11 @@ class Store:
         db.execute("DELETE FROM realign_record")
         db.executemany("INSERT INTO realign_record (type, uid) VALUES (?, ?)",
                        [(type_, uid) for type_ in migration.WRITES for uid in before[type_]])
+        # made from scratch: no record of that type and uid was in the shadow
+        db.execute("DELETE FROM realign_scratch")
+        db.executemany("INSERT INTO realign_scratch (type, uid) VALUES (?, ?)",
+                       [(type_, uid) for type_ in migration.WRITES for uid in before[type_]
+                        if uid not in shadow[type_]])
         self.set_state("cursor", 0)
         self.set_state("realign", True)
 
@@ -311,7 +331,12 @@ class Store:
     # the sync's side
 
     def pending(self, limit):
-        return self.db.execute("SELECT * FROM pending ORDER BY seq LIMIT ?", (limit,)).fetchall()
+        """The changes to push, in order; during a realignment without those held back (`held`)."""
+        held = self.held()
+        if not held:
+            return self.db.execute("SELECT * FROM pending ORDER BY seq LIMIT ?", (limit,)).fetchall()
+        rows = self.db.execute("SELECT * FROM pending ORDER BY seq").fetchall()
+        return [r for r in rows if (r["type"], r["uid"]) not in held][:limit]
 
     def pending_count(self):
         return self.db.execute("SELECT COUNT(*) FROM pending").fetchone()[0]
@@ -320,6 +345,43 @@ class Store:
         return self.db.execute("SELECT 1 FROM pending LIMIT 1").fetchone() is not None
 
     # the realignment after the store migration (see the module's text)
+
+    def _parent(self, db, type_, uid, pend_fields=None):
+        """The activity a record hangs from (`entryUid`, the pending value over the shadow's)."""
+        if pend_fields is not None and "entryUid" in pend_fields:
+            return pend_fields["entryUid"]
+        rec = db.execute("SELECT fields FROM record WHERE type = ? AND uid = ?", (type_, uid)).fetchone()
+        return json.loads(rec["fields"]).get("entryUid") if rec is not None else None
+
+    def held(self):
+        """
+        The (type, uid) of the pending changes the push holds back during a realignment: those of the
+        records the migration made from scratch that the pull has not brought yet, and those of the
+        records hanging from such an activity; the pull decides (`realigned`). Empty otherwise.
+        """
+        db = self.db
+        scratch = {(r["type"], r["uid"]) for r in db.execute("SELECT type, uid FROM realign_scratch")}
+        if not scratch:
+            return set()
+        entries = {u for t, u in scratch if t == "entry"}
+        held = set(scratch)
+        marks = ",".join("?" * len(_ENTRY_CHILDREN))
+        for p in db.execute(f"SELECT type, uid, fields FROM pending WHERE type IN ({marks})", _ENTRY_CHILDREN):
+            if self._parent(db, p["type"], p["uid"], json.loads(p["fields"])) in entries:
+                held.add((p["type"], p["uid"]))
+        return held
+
+    def notices(self, now_ms=None):
+        """What the sync left to tell the user, oldest first: dicts with `code` (texts.NOTICES), `title`
+        (the record's name), `fields` (what was typed), `type`, `uid`, `at`; those older than NOTICE_DAYS
+        are no longer shown."""
+        now_ms = int(time.time() * 1000) if now_ms is None else now_ms
+        limit = now_ms - NOTICE_DAYS * 86_400_000
+        return [n for n in self.get_state("sync.notices", []) or [] if n.get("at", 0) >= limit]
+
+    def dismiss_notices(self):
+        """The user has read the notices of the sync."""
+        self.set_state("sync.notices", None)
 
     def realigning(self):
         """A realignment is still to do: a push to restamp, or a pull from 0 to finish."""
@@ -340,13 +402,53 @@ class Store:
         """The push after the restamp went through: later ones are as usual."""
         self.set_state("realign", False)
 
-    def realigned(self):
+    def realigned(self, now_ms=None):
         """
         The pull from 0 is over: the migrated records the server did not send are not on the server (its
-        migration made them part of another activity, or they went), so they go here too; those a local
-        change still holds stay (it was pushed, or will be). Returns how many went.
+        migration made them part of another activity, or they went), so they go here too. Of those that
+        were there before the migration, the ones a local change still holds stay (it was pushed, or
+        will be); those the migration made from scratch (ghosts) go with their pending changes and those
+        of the records hanging from them, never pushed (issue #21). Returns the notices for the user, one
+        for each activity gone with a change of its own or of what hangs from it (also kept: `notices`).
         """
+        now_ms = int(time.time() * 1000) if now_ms is None else now_ms
+        out = []
+        if not self.realigning():
+            return out
         with self.transaction() as db:
+            ghosts = db.execute("SELECT type, uid FROM realign_scratch").fetchall()
+            entries = {g["uid"] for g in ghosts if g["type"] == "entry"}
+            # what was typed, before it goes: the activity's own change, then those of what hangs from it
+            typed = {}
+            for p in db.execute("SELECT * FROM pending ORDER BY seq").fetchall():
+                uid = p["uid"] if p["type"] == "entry" else None
+                if uid not in entries and p["type"] in _ENTRY_CHILDREN:
+                    uid = self._parent(db, p["type"], p["uid"], json.loads(p["fields"]))
+                if uid not in entries:
+                    continue
+                typed.setdefault(uid, {})
+                if p["type"] == "entry" and p["op"] == "upsert":
+                    typed[uid].update(json.loads(p["fields"]))
+                if p["type"] != "entry" or p["op"] == "upsert":
+                    # a delete of the activity was what the user wanted: no notice for it alone
+                    typed[uid].setdefault("_changed", True)
+                db.execute("DELETE FROM pending WHERE seq = ?", (p["seq"],))
+                db.execute("DELETE FROM sync_error WHERE type = ? AND uid = ?", (p["type"], p["uid"]))
+            for uid, fields in typed.items():
+                if not fields.pop("_changed", False):
+                    continue
+                rec = db.execute("SELECT fields FROM record WHERE type = 'entry' AND uid = ?", (uid,)).fetchone()
+                shown = dict(json.loads(rec["fields"]) if rec is not None else {}, **fields)
+                title = (shown.get("activity") or "").strip() or (shown.get("externalKey") or "").strip() or uid[:8]
+                notice = {"code": EDIT_DROPPED, "type": "entry", "uid": uid, "title": title, "fields": fields,
+                          "at": now_ms}
+                log.warning("entry %s: a change to an activity the server does not have, not applied", uid)
+                out.append(notice)
+            for g in ghosts:
+                gone = db.execute("DELETE FROM pending WHERE type = ? AND uid = ?", (g["type"], g["uid"]))
+                if gone.rowcount and g["type"] != "entry":
+                    log.warning("%s %s: a change to a record the server does not have, not applied",
+                                g["type"], g["uid"])
             left = db.execute(
                 "SELECT r.type, r.uid FROM realign_record r WHERE NOT EXISTS "
                 "(SELECT 1 FROM pending p WHERE p.type = r.type AND p.uid = r.uid)").fetchall()
@@ -354,7 +456,10 @@ class Store:
                 db.execute("DELETE FROM record WHERE type = ? AND uid = ?", (r["type"], r["uid"]))
                 db.execute("DELETE FROM sync_error WHERE type = ? AND uid = ?", (r["type"], r["uid"]))
             db.execute("DELETE FROM realign_record")
-        return len(left)
+            db.execute("DELETE FROM realign_scratch")
+            if out:
+                self.set_state("sync.notices", self.notices(now_ms) + out)
+        return out
 
     def legacy_pending(self):
         """
@@ -447,6 +552,7 @@ class Store:
             self._put(db, record)
             # the server has it: not one to drop at the end of a realignment
             db.execute("DELETE FROM realign_record WHERE type = ? AND uid = ?", (record["type"], record["uid"]))
+            db.execute("DELETE FROM realign_scratch WHERE type = ? AND uid = ?", (record["type"], record["uid"]))
             if record.get("deleted"):
                 # a deleted record cannot be changed again (SYNC.md §6)
                 db.execute("DELETE FROM pending WHERE type = ? AND uid = ?", (record["type"], record["uid"]))
@@ -479,7 +585,7 @@ class Store:
     def reset(self):
         """Forgets everything: a new pairing with another server or user."""
         with self.transaction() as db:
-            for table in ("record", "pending", "sync_error", "state", "realign_record"):
+            for table in ("record", "pending", "sync_error", "state", "realign_record", "realign_scratch"):
                 db.execute(f"DELETE FROM {table}")
             # what comes next is of the model the library speaks
             self.set_state("model", MODEL)

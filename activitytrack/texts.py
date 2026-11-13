@@ -40,8 +40,27 @@ DISPLAY_COLOURS = {
 STATUSES = {TODO: _("Da fare"), RUNNING: _("In corso"), CLOSED: _("Chiusa")}
 PRIORITIES = {0: _("Nessuna"), 1: _("Bassa"), 2: _("Media"), 3: _("Alta"), 4: _("Urgente"), 5: _("Emergenza")}
 ABSENCE_KINDS = {ABSENCE: _("Assenza"), "HOLIDAY": _("Ferie"), "LEAVE": _("Permesso"), "SICK": _("Malattia")}
-# what a command leaves to tell the user (Work.notices)
-NOTICES = {"end_moved": _("La fine dell'attività precedente è stata anticipata all'inizio di questa.")}
+# what a command leaves to tell the user (Work.notices), and what a sync does (Store.notices: %s is the
+# activity's title, as typed)
+NOTICES = {
+    "end_moved": _("La fine dell'attività precedente è stata anticipata all'inizio di questa."),
+    "edit_dropped": _("La modifica a «%s» non è stata applicata: il da fare è stato chiuso o avviato su un "
+                      "altro dispositivo."),
+}
+
+
+def notice_text(code, title=""):
+    """The words of a notice (NOTICES); [title] fills the %s of those that name a record."""
+    # translated when said: the language may have been chosen after this module was imported
+    text = _(NOTICES.get(code, code))
+    return text % title if "%s" in text else text
+
+
+def sync_notices(session):
+    """The words of what the sync left to tell the user (Store.notices), oldest first; the interface
+    dismisses them with session.store.dismiss_notices() once shown, else they go after a week."""
+    return [notice_text(n.get("code"), n.get("title") or "") for n in session.store.notices()]
+
 
 # the Home list (app HomeList.kt, HomeTabs.kt)
 SECTIONS = {
@@ -183,13 +202,17 @@ def sync_state(session, state="idle", detail=""):
         return _("Sincronizzazione non riuscita: %s") % detail
     last = store.get_state("last_sync")
     if last:
-        return _("Sincronizzato alle %s") % formats.time(datetime.fromtimestamp(last / 1000))
-    return _("In attesa della prima sincronizzazione…")
+        text = _("Sincronizzato alle %s") % formats.time(datetime.fromtimestamp(last / 1000))
+    else:
+        text = _("In attesa della prima sincronizzazione…")
+    # a change the sync could not apply (issue #21): said where every interface shows the sync's state
+    return " ".join([text] + sync_notices(session))
 
 
 def sync_needs_attention(session, state="idle"):
     return bool(session.account is None or session.store.get_state("revoked")
-                or session.store.get_state("incompatible") or state == "failed")
+                or session.store.get_state("incompatible") or state == "failed"
+                or session.store.notices())
 
 
 def update_state(status, version):

@@ -122,5 +122,6 @@
  "Cestino": "Bin",
  "Ripristina": "Restore",
  "Fatto": "Done",
- "Elimina": "Delete"
+ "Elimina": "Delete",
+ "La modifica a «%s» non è stata applicata: il da fare è stato chiuso o avviato su un altro dispositivo.": "The change to «%s» was not applied: the to-do was closed or started on another device."
 }

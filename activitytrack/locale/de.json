@@ -122,5 +122,6 @@
  "Cestino": "Papierkorb",
  "Ripristina": "Wiederherstellen",
  "Fatto": "Erledigt",
- "Elimina": "Löschen"
+ "Elimina": "Löschen",
+ "La modifica a «%s» non è stata applicata: il da fare è stato chiuso o avviato su un altro dispositivo.": "Die Änderung an «%s» wurde nicht übernommen: Die Aufgabe wurde auf einem anderen Gerät abgeschlossen oder begonnen."
 }

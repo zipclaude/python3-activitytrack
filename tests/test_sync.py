@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
+import json
 import sqlite3
 import tempfile
+import time
 import types
 import unittest
 from pathlib import Path
@@ -35,7 +37,8 @@ class SyncTest(unittest.TestCase):
         self.assertEqual(self.store.get_state("offset"), 5)
 
     def test_a_local_change_is_pushed_and_settled(self):
-        self.store.write("entry", "e1", {"activity": "Patch", "status": "RUNNING"}, now_ms=900)
+        self.store.write("entry", "e1", {"activity": "Patch", "status": "RUNNING", "zoneId": "UTC",
+                                         "createdUtcMs": 900}, now_ms=900)
         self.assertTrue(self.store.get("entry", "e1")["_pending"])
         self.assertEqual(self.store.pending_count(), 1)
         result = self.engine.sync()
@@ -305,3 +308,130 @@ class RunnerTest(unittest.TestCase):
         self.store.set_state("x", 2)
         self.assertNotEqual(other.execute("PRAGMA data_version").fetchone()[0], before)
         other.close()
+
+
+class RealignmentGhostTest(unittest.TestCase):
+    """
+    Issue #21: after the store migration a to-do with only closed entries is its own TODO activity here;
+    when the server, with newer data from another device, let the entry absorb it, that activity is a
+    ghost. A PC is never the source of trust: its pending change is not pushed, the ghost goes with what
+    hangs from it, and the user is told what was typed.
+    """
+    ZONE = "Europe/Rome"
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.dir.cleanup)
+        self.path = Path(self.dir.name) / "d.sqlite3"
+        self.legacy = {
+            "todo": {"T": {"title": "Ticket", "refs": "INC1", "done": False, "kind": "TASK", "createdUtcMs": 5,
+                           "updatedUtcMs": 6}},
+            "entry": {"E": {"status": "TO_COMPLETE", "mode": None, "activity": None, "clientUid": "c1",
+                            "todoUid": "T", "createdUtcMs": 10, "updatedUtcMs": 11, "needsReview": False,
+                            "zoneId": self.ZONE}},
+            "segment": {"s1": {"entryUid": "E", "kind": "WORK", "startUtcMs": 100, "endUtcMs": 400,
+                               "zoneId": self.ZONE, "source": "TRACKED"}},
+        }
+        store = Store(self.path, zone=self.ZONE)
+        for type_, found in self.legacy.items():
+            for uid, fields in found.items():
+                store.pulled({"type": type_, "uid": uid, "rev": 1, "fields": dict(fields)})
+        with store.transaction() as db:
+            db.execute("DELETE FROM state WHERE key = 'model'")
+        # offline, the PC renames the to-do
+        store.write("todo", "T", {"title": "Ticket rinominato"}, 1000)
+        store.close()
+        self.store = Store(self.path, zone=self.ZONE)
+        self.addCleanup(self.store.close)
+        # now: the notices of the sync are shown for a week
+        self.clock = int(time.time() * 1000)
+        self.server = FakeServer(now=lambda: self.clock)
+        self.engine = SyncEngine(self.store, self.server, clock=lambda: self.clock)
+
+    def serve(self, legacy):
+        """The server's copy, migrated by the server from its own (newer) data."""
+        from activitytrack import migration
+        for type_, found in migration.migrate_records(legacy, self.ZONE).items():
+            for uid, fields in found.items():
+                self.server.put(type_, uid, fields, at=5_000)
+
+    def pushed(self):
+        return [c for _, path, body in self.server.requests if path == "sync/push" for c in body["changes"]]
+
+    def test_the_rename_of_a_to_do_ticked_elsewhere_is_not_pushed_and_is_told(self):
+        s = self.store
+        refs = {r["uid"] for r in s.all("externalRef")}
+        self.assertEqual(s.get("entry", "T")["status"], "TODO")
+        # after the migration the PC starts the ghost too: a segment that hangs from it
+        s.write("segment", "s2", {"entryUid": "T", "kind": "WORK", "startUtcMs": 2_000, "zoneId": self.ZONE,
+                                  "source": "TRACKED", "planned": False}, 2_000)
+        # another device ticked it off: there the entry absorbed it
+        legacy = json.loads(json.dumps(self.legacy))
+        legacy["todo"]["T"].update(done=True, doneUtcMs=900)
+        self.serve(legacy)
+        self.assertNotIn(("entry", "T"), self.server.records)
+        e_before = json.loads(json.dumps(self.server.records[("entry", "E")]))
+        with self.assertLogs("activitytrack.store", "WARNING"):
+            result = self.engine.sync()
+        # nothing of the ghost went out
+        self.assertEqual([c for c in self.pushed() if c["uid"] in {"T", "s2"} | refs], [])
+        self.assertIsNone(s.get("entry", "T"))
+        self.assertIsNone(s.get("segment", "s2"))
+        self.assertEqual([r for r in s.all("externalRef") if r["entryUid"] == "T" or r["value"] == "T"], [])
+        # the user is told, with what was typed
+        (n,) = result.notices
+        self.assertEqual((n["code"], n["uid"], n["title"]), ("edit_dropped", "T", "Ticket rinominato"))
+        self.assertEqual(n["fields"]["activity"], "Ticket rinominato")
+        self.assertEqual(s.notices(self.clock), [n])
+        # no sync error left, nothing pending, the realignment over
+        self.assertEqual((result.errors, s.errors(), s.pending_count()), ([], [], 0))
+        self.assertIsNone(s.get_state("last_error"))
+        self.assertFalse(s.realigning())
+        # E is the server's, untouched
+        self.assertEqual(self.server.records[("entry", "E")], e_before)
+        e = s.get("entry", "E")
+        self.assertEqual({k: e[k] for k in e_before["fields"]}, e_before["fields"])
+        self.assertFalse(e["_pending"])
+
+    def test_the_notice_is_said_with_the_state_of_the_sync_until_dismissed(self):
+        from activitytrack import i18n, texts
+        legacy = json.loads(json.dumps(self.legacy))
+        legacy["todo"]["T"].update(done=True, doneUtcMs=900)
+        self.serve(legacy)
+        with self.assertLogs("activitytrack.store", "WARNING"):
+            self.engine.sync()
+        paired = types.SimpleNamespace(store=self.store, account=object())
+        try:
+            i18n.set_language("it")
+            self.assertIn("La modifica a «Ticket rinominato» non è stata applicata", texts.sync_state(paired, "ok"))
+            self.assertTrue(texts.sync_needs_attention(paired, "ok"))
+            i18n.set_language("en")
+            self.assertEqual(texts.sync_notices(paired), [
+                "The change to «Ticket rinominato» was not applied: the to-do was closed or started on another "
+                "device."])
+        finally:
+            i18n.set_language("it")
+        self.store.dismiss_notices()
+        self.assertEqual(texts.sync_notices(paired), [])
+        self.assertNotIn("«", texts.sync_state(paired, "ok"))
+        self.assertFalse(texts.sync_needs_attention(paired, "ok"))
+
+    def test_a_dirty_to_do_the_server_kept_is_pushed_field_by_field(self):
+        # elsewhere nothing changed it: the server's migration kept it a TODO activity too
+        self.serve(self.legacy)
+        result = self.engine.sync()
+        (change,) = [c for c in self.pushed() if c["uid"] == "T"]
+        self.assertEqual(change["fields"], {"activity": "Ticket rinominato"})
+        self.assertEqual(change["times"], {"activity": self.clock})
+        self.assertEqual(self.server.records[("entry", "T")]["fields"]["activity"], "Ticket rinominato")
+        self.assertEqual(self.server.records[("entry", "T")]["fields"]["status"], "TODO")
+        self.assertEqual((result.errors, result.notices, self.store.pending_count()), ([], [], 0))
+        self.assertEqual(self.store.get("entry", "T")["activity"], "Ticket rinominato")
+
+    def test_a_record_made_after_the_migration_is_pushed_whole(self):
+        self.serve(self.legacy)
+        self.store.write("entry", "N", {"kind": "ACTIVITY", "status": "TODO", "activity": "Nuovo",
+                                        "zoneId": self.ZONE, "createdUtcMs": 3_000}, 3_000)
+        result = self.engine.sync()
+        self.assertEqual(result.errors, [])
+        self.assertEqual(self.server.records[("entry", "N")]["fields"]["activity"], "Nuovo")

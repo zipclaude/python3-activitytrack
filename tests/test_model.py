@@ -99,6 +99,20 @@ class RoundingTest(unittest.TestCase):
         self.assertEqual(model.round_down(t, 15, ROME, not_before=self.at(10, 3)), self.at(10, 3))
         self.assertEqual(model.round_up(t, 15, ROME, limit=self.at(10, 10)), self.at(10, 10))
 
+    def test_the_instant_of_a_switch(self):
+        # activitytrack/activitytrack#179: the nearest, ahead by at most half the quantum (R1)
+        self.assertEqual(model.round_switch(self.at(10, 7, 30), 5, ROME, self.at(9, 40)), self.at(10, 10))
+        # not after the start of the segment it closes: the exact instant (R3)
+        self.assertEqual(model.round_switch(self.at(10, 12, 29), 5, ROME, self.at(10, 10)), self.at(10, 12, 29))
+        self.assertEqual(model.round_switch(self.at(10, 14), 60, ROME, self.at(10, 12)), self.at(10, 14))
+        # never before that start, even when it lies ahead
+        self.assertEqual(model.round_switch(self.at(10, 6), 5, ROME, self.at(10, 10)), self.at(10, 10))
+
+    def test_the_limit_of_closing_ahead(self):
+        # activitytrack/activitytrack#179 R5: 24 hours
+        self.assertEqual(model.FUTURE_CLOSE_MS, 86_400_000)
+        self.assertEqual(model.close_limit(self.at(10)), self.at(10) + 86_400_000)
+
     def test_on_the_local_clock(self):
         # a zone off by 5:45: the quarter hours are those of its clock
         kathmandu = ZoneInfo("Asia/Kathmandu")

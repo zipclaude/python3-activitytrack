@@ -539,21 +539,70 @@ class RoundingTest(unittest.TestCase):
         self.work.switch(uid, PAUSE)
         # work 15 and pause 5: the nearest multiple of 5, half up
         self.assertEqual(self.segs(uid), [(WORK, at(9, 40), at(10, 10)), (PAUSE, at(10, 10), None)])
+        # the nearest is the pause's start: the exact instant, no segment of zero length (#179 R3)
         self.now = at(10, 12, 29)
         self.work.switch(uid, WORK)
-        self.assertEqual(self.segs(uid)[1:], [(PAUSE, at(10, 10), at(10, 10)), (WORK, at(10, 10), None)])
-        # never before the start of the segment being closed
+        self.assertEqual(self.segs(uid)[1:], [(PAUSE, at(10, 10), at(10, 12, 29)), (WORK, at(10, 12, 29), None)])
+        # never before the start of the segment being closed: 10:00 is, so the exact instant again
         self.work.quanta.update({WORK: 60, TRAVEL: 60})
         self.now = at(10, 14)
         self.work.switch(uid, TRAVEL)
-        self.assertEqual(self.segs(uid)[-2][1:], (at(10, 10), at(10, 10)))
+        self.assertEqual(self.segs(uid)[-2:], [(WORK, at(10, 12, 29), at(10, 14)), (TRAVEL, at(10, 14), None)])
 
-    def test_the_stop_is_capped_at_an_hour_ahead(self):
+    def test_a_switch_may_lie_ahead_by_half_the_quantum(self):
+        # #179 R1: kept as rounded, not refused or changed for lying ahead; nothing elapsed goes negative
+        from activitytrack import texts
+        uid = self.start(start_ms=at(9, 40))
+        self.now = at(10, 7, 30)
+        self.work.switch(uid, PAUSE)
+        work, pause = self.work.segments(uid)
+        self.assertEqual(pause["startUtcMs"] - self.now, 150_000)
+        self.assertEqual(self.work.totals(uid)[PAUSE], 0)
+        self.assertEqual(texts.hm(self.now - pause["startUtcMs"]), "0:00")
+        state, since = self.work.display(self.store.get("entry", uid))
+        self.assertEqual((state, model.to_ms(since)), (PAUSE, at(10, 10)))
+        self.assertEqual(self.work.busy(date(2026, 11, 11)), [(9 * 60 + 40, 10 * 60 + 10)])
+        # the times left as they are may be saved again
+        self.work.edit_segment(work["uid"], work["startUtcMs"], work["endUtcMs"], WORK)
+        self.assertEqual(self.segs(uid)[0], (WORK, at(9, 40), at(10, 10)))
+        # a time moved ahead is still refused
+        with self.assertRaises(WorkError) as err:
+            self.work.edit_segment(work["uid"], work["startUtcMs"], at(10, 11), WORK)
+        self.assertEqual(err.exception.code, "future_time")
+
+    def test_a_switch_is_never_before_the_open_segment_even_ahead(self):
+        # #179 R3, the owner's example: work and pause 10, travel 5
+        self.work.quanta.update({WORK: 10, PAUSE: 10, TRAVEL: 5})
+        uid = self.start(start_ms=at(9))
+        self.now = at(10, 5)
+        self.work.switch(uid, PAUSE)
+        self.assertEqual(self.segs(uid), [(WORK, at(9), at(10, 10)), (PAUSE, at(10, 10), None)])
+        # at 10:06 the nearest of 5 is 10:05, before the pause: not stored before it, and the pause, which
+        # has not begun, goes rather than end where it starts
+        self.now = at(10, 6)
+        self.work.switch(uid, TRAVEL)
+        self.assertEqual(self.segs(uid), [(WORK, at(9), at(10, 10)), (TRAVEL, at(10, 10), None)])
+        self.assertEqual(self.store.get("entry", uid)["mode"], TRAVEL)
+        # a typed instant before the open segment is refused when exact, else brought to its start
+        self.now = at(10, 8)
+        with self.assertRaises(WorkError) as err:
+            self.work.switch(uid, WORK, at=at(10, 7), exact=True)
+        self.assertEqual(err.exception.code, "before_segment")
+
+    def test_the_stop_is_capped_at_a_day_ahead(self):
+        # #179 R5: one limit, 24 hours
+        self.assertEqual(model.FUTURE_CLOSE_MS, 24 * 60 * MIN)
         uid = self.start()
         self.work.quanta[WORK] = 120
         self.now = at(10, 20)
         self.work.stop(uid)
-        self.assertEqual(self.segs(uid)[0][2], self.now + 60 * MIN)
+        self.assertEqual(self.segs(uid)[0][2], at(12))
+        # a quantum that rounds up beyond the day: capped at it
+        other = self.start()
+        self.work.quanta[WORK] = 10 ** 6
+        self.assertGreater(model.round_up(self.now, 10 ** 6, ROME), self.now + 24 * 60 * MIN)
+        self.work.stop(other)
+        self.assertEqual(self.segs(other)[0][2], self.now + 24 * 60 * MIN)
 
     def test_the_quantum_is_the_kinds(self):
         uid = self.start(mode=TRAVEL)
@@ -578,19 +627,21 @@ class FutureAndNoticesTest(unittest.TestCase):
     def start(self, **kw):
         return self.work.start(StartRequest(client="c", activity="x", **kw))
 
-    def test_a_stop_up_to_an_hour_ahead(self):
+    def test_a_stop_up_to_a_day_ahead(self):
         uid = self.start(start_ms=at(9))
         self.work.stop(uid, at=at(10, 45), exact=True)
         e = self.store.get("entry", uid)
         self.assertEqual((e["status"], e["closedUtcMs"]), (CLOSED, self.now))
         self.assertEqual(self.work.display(e), ("DONE", datetime.fromtimestamp(at(10, 45) / 1000, ROME)))
+        # #179 R5: up to 24 hours; beyond, refused, typed exactly or loosely
         other = self.start(start_ms=at(9, 30))
-        with self.assertRaises(WorkError) as err:
-            self.work.stop(other, at=at(11, 1), exact=True)
-        self.assertEqual(err.exception.code, "future_time")
-        # not clamped to a past instant when typed loosely
-        self.work.stop(other, at=at(12))
-        self.assertEqual(self.work.segments(other)[0]["endUtcMs"], at(11))
+        for exact in (True, False):
+            with self.assertRaises(WorkError) as err:
+                self.work.stop(other, at=self.now + 24 * 60 * MIN + 1, exact=exact)
+            self.assertEqual(err.exception.code, "future_time")
+        self.assertEqual(self.store.get("entry", other)["status"], RUNNING)
+        self.work.stop(other, at=at(9, day=12))
+        self.assertEqual(self.work.segments(other)[0]["endUtcMs"], at(9, day=12))
 
     def test_not_with_locked_times(self):
         self.work.policy = policy(settings={"editableTimes": {"value": False, "locked": True}})
@@ -603,8 +654,9 @@ class FutureAndNoticesTest(unittest.TestCase):
         self.work.add_segment(uid, at(9, 10), at(9, 30), TRAVEL)
         first, last = self.work.segments(uid)
         self.work.edit_segment(last["uid"], last["startUtcMs"], at(10, 40), TRAVEL)
+        self.work.edit_segment(last["uid"], last["startUtcMs"], at(9, day=12), TRAVEL)
         with self.assertRaises(WorkError):
-            self.work.edit_segment(last["uid"], last["startUtcMs"], at(11, 5), TRAVEL)
+            self.work.edit_segment(last["uid"], last["startUtcMs"], at(10, 1, day=12), TRAVEL)
         with self.assertRaises(WorkError):
             self.work.edit_segment(first["uid"], first["startUtcMs"], at(10, 30), WORK)
         with self.assertRaises(WorkError):
@@ -630,6 +682,54 @@ class FutureAndNoticesTest(unittest.TestCase):
         # no overlap at 9:00: the end stays, the segment is not cut to nothing
         self.assertEqual(self.work.segments(a)[0]["endUtcMs"], at(10, 40))
         self.assertEqual(self.work.notices, [])
+
+    def test_a_reopen_or_resume_moves_an_end_ahead_back(self):
+        # #179 R2: the end ahead comes back to the new start, with the notice of another start
+        a = self.start(start_ms=at(9))
+        self.work.stop(a, at=at(10, 40), exact=True)
+        self.now = at(10, 20)
+        self.work.reopen(a, WORK)
+        self.assertEqual([(s["startUtcMs"], s.get("endUtcMs")) for s in self.work.segments(a)],
+                         [(at(9), at(10, 20)), (at(10, 20), None)])
+        self.assertEqual(self.work.notices, [("end_moved", a)])
+        # resume: suspended, and the end of its last segment then put ahead
+        self.now = at(10, 30)
+        self.work.suspend(a)
+        last = self.work.segments(a)[-1]
+        self.work.edit_segment(last["uid"], last["startUtcMs"], at(11), WORK)
+        self.now = at(10, 35)
+        self.work.resume(a, WORK)
+        self.assertEqual([(s["startUtcMs"], s.get("endUtcMs")) for s in self.work.segments(a)][1:],
+                         [(at(10, 20), at(10, 35)), (at(10, 35), None)])
+        self.assertEqual(self.work.notices[-1], ("end_moved", a))
+
+    def test_a_segment_wholly_ahead_goes_with_a_notice(self):
+        # #179 R4: the declared return trip, and a start at or before it
+        w = self.work
+        uid = self.start(start_ms=at(8), mode=TRAVEL)
+        self.now = at(8, 40)
+        w.switch(uid, WORK)
+        self.now = at(11)
+        w.stop(uid, return_trip=True)
+        self.assertEqual([s["kind"] for s in w.segments(uid)], [TRAVEL, WORK, TRAVEL])
+        # reopened at the same instant: cut at its start the return would be nothing
+        w.reopen(uid, WORK)
+        self.assertEqual([(s["kind"], s["startUtcMs"], s.get("endUtcMs")) for s in w.segments(uid)][1:],
+                         [(WORK, at(8, 40), at(11)), (WORK, at(11), None)])
+        self.assertEqual(w.notices, [("return_removed", uid)])
+        # another segment ahead (from another device) and another activity started before it
+        self.now = at(11, 10)
+        w.stop(uid)
+        self.store.write("segment", "ahead", {"entryUid": uid, "kind": WORK, "startUtcMs": at(11, 30),
+                                              "endUtcMs": at(11, 45), "zoneId": "Europe/Rome",
+                                              "source": "MANUAL", "planned": False}, 1)
+        other = self.start()
+        self.assertIsNone(self.store.get("segment", "ahead"))
+        self.assertEqual(w.notices[-1], ("segment_removed", uid))
+        self.assertEqual(self.store.get("entry", other)["status"], RUNNING)
+        from activitytrack import texts
+        self.assertEqual(texts.notice_text("return_removed"), "Il viaggio di ritorno previsto è stato rimosso.")
+        self.assertEqual(texts.notice_text("segment_removed"), "Un tratto previsto è stato rimosso.")
 
     def test_travel_from_work_starts_nothing_new_with_planned_only(self):
         uid = self.start(start_ms=at(9))
@@ -720,6 +820,23 @@ class FutureAndNoticesTest(unittest.TestCase):
         self.assertFalse(w.return_trip_addable(other))
         with self.assertRaises(WorkError):
             w.stop(other, return_trip=True)
+
+    def test_a_reopen_with_rounding_drops_the_return_ahead(self):
+        # #179 R2 and R4 with saving rounded times: the work's end ahead moves back, the return goes
+        w = self.work
+        w.round_stored = True
+        self.now = at(8, 3)
+        uid = self.start(mode=TRAVEL)
+        self.now = at(8, 44)
+        w.switch(uid, WORK)
+        self.now = at(11, 1)
+        w.stop(uid, return_trip=True)
+        self.assertEqual([s["kind"] for s in w.segments(uid)], [TRAVEL, WORK, TRAVEL])
+        self.now = at(11, 5)
+        w.reopen(uid, WORK)
+        self.assertEqual([(s["kind"], s["startUtcMs"], s.get("endUtcMs")) for s in w.segments(uid)][1:],
+                         [(WORK, at(8, 45), at(11)), (WORK, at(11), None)])
+        self.assertEqual(sorted(w.notices), [("end_moved", uid), ("return_removed", uid)])
 
     def test_the_return_trip_with_rounding_keeps_the_outbound_exact_duration(self):
         w = self.work

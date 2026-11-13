@@ -123,5 +123,7 @@
  "Ripristina": "Wiederherstellen",
  "Fatto": "Erledigt",
  "Elimina": "Löschen",
- "La modifica a «%s» non è stata applicata: il da fare è stato chiuso o avviato su un altro dispositivo.": "Die Änderung an «%s» wurde nicht übernommen: Die Aufgabe wurde auf einem anderen Gerät abgeschlossen oder begonnen."
+ "La modifica a «%s» non è stata applicata: il da fare è stato chiuso o avviato su un altro dispositivo.": "Die Änderung an «%s» wurde nicht übernommen: Die Aufgabe wurde auf einem anderen Gerät abgeschlossen oder begonnen.",
+ "Il viaggio di ritorno previsto è stato rimosso.": "Die geplante Rückfahrt wurde entfernt.",
+ "Un tratto previsto è stato rimosso.": "Ein geplanter Abschnitt wurde entfernt."
 }

@@ -44,6 +44,9 @@ ABSENCE_KINDS = {ABSENCE: _("Assenza"), "HOLIDAY": _("Ferie"), "LEAVE": _("Perme
 # activity's title, as typed)
 NOTICES = {
     "end_moved": _("La fine dell'attività precedente è stata anticipata all'inizio di questa."),
+    # a segment wholly ahead the new start came before: a TRAVEL one (a declared return trip), another
+    "return_removed": _("Il viaggio di ritorno previsto è stato rimosso."),
+    "segment_removed": _("Un tratto previsto è stato rimosso."),
     "edit_dropped": _("La modifica a «%s» non è stata applicata: il da fare è stato chiuso o avviato su un "
                       "altro dispositivo."),
 }

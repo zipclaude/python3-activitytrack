@@ -148,8 +148,10 @@ class Work:
     The commands and readings of the activities. [round_stored]: the action buttons store rounded
     instants (§4.2, setting roundStoredTimes, default off); None reads it from the policy. [quanta]:
     the quantum in minutes of each kind of segment, DEFAULT_QUANTA unless given. [notices] collects what
-    the interface should tell the user after a command: ("end_moved", uid) when the end in the future of
-    another activity moved back to the start of this one (§4.1).
+    the interface should tell the user after a command (texts.NOTICES): ("end_moved", uid) when the end in
+    the future of an activity, another or this one, moved back to the start of this one (§4.1);
+    ("return_removed", uid) or ("segment_removed", uid) when a segment of [uid] that lay wholly ahead (a
+    TRAVEL one: a declared return trip) went instead (activitytrack/activitytrack#179).
     """
 
     def __init__(self, store, policy=None, clock=now_ms, zone=None, round_stored=None, quanta=None):
@@ -343,7 +345,8 @@ class Work:
         return bool(on) and self.policy.setting("editableTimes", True)
 
     def _floor(self, uid, now):
-        """The latest start or end of the activity's segments that is not in the future."""
+        """The latest start or end of the activity's segments that is not in the future (a start is never
+        put ahead to follow an end in the future: that end moves back instead, §4.1)."""
         best = 0
         for s in self.real_segments(uid):
             for t in (s.get("startUtcMs"), s.get("endUtcMs")):
@@ -351,15 +354,30 @@ class Work:
                     best = max(best, t)
         return best
 
-    def _instant(self, uid, now, at, exact, op, old_kind=None, new_kind=None):
+    def _close_limit(self, now):
+        """How far a closing instant may go: up to FUTURE_CLOSE_MS after now with editable times (§4.1)."""
+        return model.close_limit(now) if self.policy.setting("editableTimes", True) else now
+
+    def _check_close(self, end_ms, now):
+        """The one check of a closing instant against the future (§4.1): beyond the limit it is refused."""
+        if end_ms is not None and end_ms > self._close_limit(now):
+            raise WorkError("future_time")
+
+    def _instant(self, uid, now, at, exact, op, old_kind=None, new_kind=None, seg=None):
         """
         The instant of a command: [at] typed (clamped between the latest boundary and now, an error
         when [exact] and it does not fit), else now, rounded for the action buttons when set. A stop
-        may lie up to 60 minutes after now when times are editable.
+        may lie up to FUTURE_CLOSE_MS after now when times are editable, never beyond it (refused when
+        typed, capped when rounded). What closes [seg], the open segment, is never before its start,
+        even when that start lies ahead (a switch rounded to the nearest, §4.2).
         """
         floor = self._floor(uid, now)
-        upper = now + FUTURE_CLOSE_MS if op == STOP and self.policy.setting("editableTimes", True) else now
+        if seg is not None and op in (_SWITCH, STOP, SUSPEND):
+            floor = max(floor, seg["startUtcMs"])
+        upper = self._close_limit(now) if op == STOP else now
         if at is not None:
+            if op == STOP:
+                self._check_close(at, now)
             if exact:
                 if at > upper:
                     raise WorkError("future_time")
@@ -373,9 +391,10 @@ class Work:
             if op == _START:
                 when = model.round_down(now, q[new_kind], tz, floor)
             elif op == _SWITCH:
-                when = model.round_nearest(now, min(q[old_kind], q[new_kind]), tz, floor)
+                when = model.round_switch(now, min(q[old_kind], q[new_kind]), tz,
+                                          seg["startUtcMs"] if seg is not None else floor)
             elif op == STOP and old_kind is not None:
-                when = model.round_up(now, q[old_kind], tz, now + FUTURE_CLOSE_MS)
+                when = model.round_up(now, q[old_kind], tz, self._close_limit(now))
         return max(when, floor)
 
     def _new_instant(self, now, kind):
@@ -384,16 +403,26 @@ class Work:
 
     def _trim_future_ends(self, when, now):
         """
-        An activity starts before the end in the future of an earlier one: that end moves back to the
-        start, with a notice (§4.1). Absences are in the future by nature and are left alone.
+        An activity starts (or resumes, or reopens) before the end in the future of an earlier one: that
+        end moves back to the start, with a notice (§4.1). A segment that lies wholly ahead and that the
+        start comes at or before (a declared return trip) goes instead of being cut to nothing, with a
+        notice of its own (activitytrack/activitytrack#179). Absences are in the future by nature and are
+        left alone.
         """
         live = {e["uid"] for e in self.entries()}
         for s in self.store.all("segment"):
             end = s.get("endUtcMs")
-            # only a real overlap: a segment that starts after [when] keeps its end
-            if (s.get("entryUid") in live and end is not None and end > now
-                    and (s.get("startUtcMs") or 0) <= when < end
-                    and s.get("kind") != ABSENCE and not model.is_planned(s)):
+            if (s.get("entryUid") not in live or end is None or end <= now or when >= end
+                    or s.get("kind") == ABSENCE or model.is_planned(s)):
+                continue
+            start = s.get("startUtcMs") or 0
+            # at its start (cut there it would be nothing), or before it when it has not begun yet
+            if when == start or (when < start and start > now):
+                self.store.delete("segment", s["uid"], now)
+                self.notices.append(("return_removed" if s.get("kind") == TRAVEL else "segment_removed",
+                                     s["entryUid"]))
+            # only a real overlap: a segment that started (in the past) after [when] keeps its end
+            elif start <= when:
                 self.store.write("segment", s["uid"], {"endUtcMs": when}, now)
                 self.notices.append(("end_moved", s["entryUid"]))
 
@@ -428,14 +457,18 @@ class Work:
             when = now
         else:
             op = cmd if cmd in (STOP, SUSPEND) else _SWITCH if close else _START
-            when = self._instant(uid, now, at, exact, op, old_kind, open_kind)
+            when = self._instant(uid, now, at, exact, op, old_kind, open_kind, seg)
         if e.get("status") == TODO:
             # the plan has served: the real segment replaces the planned ones
             for s in self.segments(uid):
                 if model.is_planned(s):
                     self.store.delete("segment", s["uid"], now)
         if close:
-            self.store.write("segment", seg["uid"], {"endUtcMs": max(when, seg["startUtcMs"])}, now)
+            if when <= seg["startUtcMs"] and seg["startUtcMs"] > now:
+                # it has not begun (a switch rounded ahead): closed where it starts it would be nothing
+                self.store.delete("segment", seg["uid"], now)
+            else:
+                self.store.write("segment", seg["uid"], {"endUtcMs": max(when, seg["startUtcMs"])}, now)
         if open_kind is not None:
             self._trim_future_ends(when, now)
             self._segment(uid, open_kind, when, source=source)
@@ -580,8 +613,8 @@ class Work:
     @atomic
     def stop(self, uid, at=None, exact=False, return_trip=False):
         """
-        RUNNING -> CLOSED: the open segment ends at [at] (up to 60 minutes after now with editable
-        times), `closedUtcMs` is now. With [return_trip] the return travel is added (§3.2, see
+        RUNNING -> CLOSED: the open segment ends at [at] (up to FUTURE_CLOSE_MS, 24 hours, after now with
+        editable times), `closedUtcMs` is now. With [return_trip] the return travel is added (§3.2, see
         return_trip_offered).
         """
         outbound = None
@@ -661,7 +694,7 @@ class Work:
         if self.policy.planned_only:
             raise WorkError("planned_only")
         now = self.clock()
-        when = self._instant(uid, now, at, False, _SWITCH, WORK, TRAVEL)
+        when = self._instant(uid, now, at, False, _SWITCH, WORK, TRAVEL, self.open_segment(uid))
         self._step(uid, STOP, at=when)
         new = new_uid()
         self.store.write("entry", new, {
@@ -915,19 +948,24 @@ class Work:
             self._touch(entry_uid, {"needsReview": over})
 
     def _is_last(self, seg):
-        """The segment is the last real one of its activity: its end may lie up to 60 minutes ahead (§4.1)."""
+        """The segment is the last real one of its activity: its end may lie up to FUTURE_CLOSE_MS ahead (§4.1)."""
         real = self.real_segments(seg["entryUid"])
         return bool(real) and real[-1]["uid"] == seg["uid"]
 
     def _check_times(self, e, seg, start_ms, end_ms, planned):
-        """The times of a segment of [e] against the future and the length (planned and absence ones may lie ahead)."""
+        """
+        The times of a segment of [e] against the future and the length (planned and absence ones may lie
+        ahead). An instant left as it was is not refused for lying ahead: a switch rounded to the nearest
+        stores one (§4.2, activitytrack/activitytrack#179).
+        """
         now = self.clock()
         if not (planned or e.get("kind") == ABSENCE):
-            if start_ms > now:
+            if start_ms > now and (seg is None or start_ms != seg.get("startUtcMs")):
                 raise WorkError("future_time")
-            if end_ms is not None and end_ms > now:
-                if not ((seg is None or self._is_last(seg)) and end_ms <= now + FUTURE_CLOSE_MS):
+            if end_ms is not None and end_ms > now and (seg is None or end_ms != seg.get("endUtcMs")):
+                if not (seg is None or self._is_last(seg)):
                     raise WorkError("future_time")
+                self._check_close(end_ms, now)
         if end_ms is not None and end_ms - start_ms < self._min_ms():
             raise WorkError("too_short" if end_ms > start_ms else "invalid_range")
 

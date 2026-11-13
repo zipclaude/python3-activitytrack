@@ -29,8 +29,9 @@ DELETED, LATE, PLANNED, SUSPENDED, DONE, INCOMPLETE = (
 # also TODO, WORK, TRAVEL, PAUSE and ABSENCE, which are the words above
 DISPLAY_STATES = (DELETED, ABSENCE, LATE, PLANNED, TODO, WORK, TRAVEL, PAUSE, SUSPENDED, DONE, INCOMPLETE)
 
-# how far after now a closing time may lie (§4.1)
-FUTURE_CLOSE_MS = 60 * 60_000
+# how far after now a closing time may lie: a stop, the end of the last segment (§4.1; owner, 24 hours,
+# activitytrack/activitytrack#179)
+FUTURE_CLOSE_MS = 24 * 60 * 60_000
 # the quantum of an instant of a segment of each kind, in minutes (ReportRounding.DEFAULT; §4.2)
 DEFAULT_QUANTA = {WORK: 15, TRAVEL: 5, PAUSE: 5}
 
@@ -251,6 +252,24 @@ def round_nearest(ms, quantum_min, tz, not_before=None):
     off = _local_offset_ms(ms, tz)
     out = (ms + off + q // 2) // q * q - off
     return max(out, not_before) if not_before is not None else out
+
+
+def round_switch(ms, quantum_min, tz, start):
+    """
+    The one instant of a switch (§4.2, activitytrack/activitytrack#179): the nearest multiple of the
+    quantum, which may lie ahead of [ms] by half of it; when that is not after [start], the start of the
+    segment being closed, [ms] itself (no segment of zero length); never before [start], even when that
+    start lies ahead (the caller drops a segment that would end where it starts).
+    """
+    out = round_nearest(ms, quantum_min, tz)
+    if out <= start:
+        out = ms
+    return max(out, start)
+
+
+def close_limit(now_ms):
+    """The latest instant a stop or the end of the last segment may take (§4.1)."""
+    return now_ms + FUTURE_CLOSE_MS
 
 
 def priority_of_legacy(value):

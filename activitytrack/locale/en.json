@@ -123,5 +123,7 @@
  "Ripristina": "Restore",
  "Fatto": "Done",
  "Elimina": "Delete",
- "La modifica a «%s» non è stata applicata: il da fare è stato chiuso o avviato su un altro dispositivo.": "The change to «%s» was not applied: the to-do was closed or started on another device."
+ "La modifica a «%s» non è stata applicata: il da fare è stato chiuso o avviato su un altro dispositivo.": "The change to «%s» was not applied: the to-do was closed or started on another device.",
+ "Il viaggio di ritorno previsto è stato rimosso.": "The planned return trip was removed.",
+ "Un tratto previsto è stato rimosso.": "A planned stretch was removed."
 }

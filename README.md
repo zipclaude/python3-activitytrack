@@ -27,6 +27,11 @@ One application, whatever the interface: they share the data folder
 | `manifest` | the signed update manifest: JWS check against pinned signers, channels, sha256 of the package |
 | `i18n`, `texts`, `locale/` | the texts in it, en, de, es |
 
+What a command moved without being asked (an end moved back, a planned return trip or segment removed) is
+collected by `Work.take_notices()`, which returns the messages and forgets them: the interface calls it after a
+command. What the sync did not apply (an edit dropped after the realignment) is in `Store.notices()`, kept
+until the interface calls `Store.dismiss_notices()` and in any case 7 days; `texts.sync_notices()` gives the words.
+
 No graphical toolkit: it runs on a server without a display too.
 
 ## Packages

@@ -43,3 +43,7 @@ The job `windows` of `.gitlab-ci.yml` runs the same tests on Windows (paid share
 
 - `activitytrack/__init__.py` (version), `debian/changelog` (`X.Y.Z-1`; a beta is `X.Y.Z~beta-N-1`).
 - The tag `vX.Y.Z` is what the cli, tui and desktop name in `.gitlab/lib-ref`: release the library **first**.
+
+## 4. GitHub backup
+
+GitHub (`zipclaude/python3-activitytrack`) is a backup of the GitLab project. The workflow in `.github/workflows/ci.yml` mirrors `.gitlab-ci.yml`: keep them in step. Nothing runs on its own there: start it with "Run workflow" on a branch or tag, or push a branch `ghtest/<name>` to try a change. The job `testvm` stays GitLab-only (it needs the owner's test VM runner).

@@ -1,0 +1,181 @@
+# CI of python3-activitytrack on GitHub, the backup of the GitLab project: it mirrors .gitlab-ci.yml
+# (keep the two in step), so the backup can test, package and release on its own if GitLab is unavailable.
+# Nothing runs on its own (not on pushes to other branches, not on tags, not on pull requests): start a
+# run by hand ("Run workflow" on a branch or tag) or push a branch ghtest/<name> (the equivalent of
+# GitLab's testvm/*: it tests a workflow that is not on the default branch yet).
+# Started on a branch a run tests and builds the Debian/Ubuntu packages and the tarball, and
+# publishes nothing; started on a tag vX.Y.Z it also tries everything and publishes the release.
+
+name: CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["ghtest/**"]
+
+permissions:
+  contents: read
+
+env:
+  DEBIAN_FRONTEND: noninteractive
+
+jobs:
+  # GitHub has no regular expressions in "if:": the tag test of GitLab's windows job is done here
+  stable:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.check.outputs.tag }}
+    steps:
+      - id: check
+        run: |
+          # a stable tag is vX.Y.Z (any number of dot-separated numbers); a suffix (-beta-1, -alfa-2) is not
+          if [ "$GITHUB_REF_TYPE" = tag ] && echo "$GITHUB_REF_NAME" | grep -Eq '^v[0-9]+(\.[0-9]+)*$'; then
+            echo "tag=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  linux:
+    # the distributions' packages only: the oldest and the newest of the targets
+    runs-on: ubuntu-latest
+    container: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ["debian:trixie", "debian:forky", "ubuntu:24.04"]
+    steps:
+      - name: Distribution packages
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends git ca-certificates python3 python3-cryptography python3-keyring flake8
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Lint
+        run: flake8 activitytrack tests scripts
+      - name: Texts
+        run: python3 scripts/strings.py --check
+      - name: Tests
+        run: python3 -m unittest discover -s tests -t . -v
+
+  windows:
+    # Windows only at the release (a stable version tag), as on GitLab
+    needs: stable
+    if: needs.stable.outputs.tag == 'true'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # GitLab installs Python with choco on its bare shared runner; here the action does it
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+      - name: Install
+        run: python -m pip install .
+      - name: Tests
+        run: python -m unittest discover -s tests -t . -v
+
+  # the packages are built on a tag and in a run started by hand (or on a ghtest/* branch)
+  deb:
+    needs: linux
+    runs-on: ubuntu-latest
+    container: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { image: "debian:trixie", suffix: deb13 }
+          - { image: "debian:forky", suffix: deb14 }
+          - { image: "ubuntu:24.04", suffix: ubuntu24.04 }
+          - { image: "ubuntu:26.04", suffix: ubuntu26.04 }
+    steps:
+      - name: Build tools
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates git build-essential devscripts equivs lintian
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Version
+        run: |
+          V=$(sed -n 's/^__version__ = "\(.*\)"/\1/p' activitytrack/__init__.py)
+          if [ "$GITHUB_REF_TYPE" = tag ]; then test "v$V" = "$GITHUB_REF_NAME"; fi
+          # only the first "-": 0.9.4-beta5-1 is 0.9.4~beta5-1
+          DV=$(echo "$V" | sed 's/-/~/')
+          # the package: that version and a Debian revision, 1.1.0~beta.1-1
+          PV=$(dpkg-parsechangelog -S Version)
+          test "$(dpkg-parsechangelog -S Source)" = python-activitytrack && test "${PV%-*}" = "$DV" && test "$PV" != "$DV"
+          # the distribution goes in the revision: 1.1.0~beta.1-1~deb13 still satisfies (>= 1.1.0~beta.1)
+          sed -i "1s/($PV)/($PV~${{ matrix.suffix }})/" debian/changelog
+          head -1 debian/changelog
+      - name: Build dependencies
+        run: mk-build-deps -i -r -t "apt-get -y --no-install-recommends" debian/control
+      - name: Package (with the tests)
+        run: |
+          dpkg-buildpackage -b -us -uc
+          mkdir dist && mv ../python3-activitytrack_*.deb dist/
+          dpkg-deb --info dist/*.deb
+          dpkg-deb --contents dist/*.deb
+          lintian --fail-on error --no-tag-display-limit dist/*.deb
+      - name: Install and import
+        run: |
+          apt-get install -y ./dist/*.deb
+          cd / && python3 -c "import activitytrack, activitytrack.sync, activitytrack.work; print(activitytrack.__version__, activitytrack.__file__)"
+          ls /usr/lib/python3/dist-packages/activitytrack/locale/
+      - name: Remove
+        run: |
+          apt-get purge -y python3-activitytrack
+          # from /: in the checkout Python would find the sources
+          cd / && ! python3 -c "import activitytrack" 2>/dev/null
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: deb-${{ matrix.suffix }}
+          path: dist/*.deb
+          retention-days: 30
+
+  tarball:
+    needs: linux
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Tarball
+        run: |
+          V=$(sed -n 's/^__version__ = "\(.*\)"/\1/p' activitytrack/__init__.py)
+          mkdir dist
+          git archive --prefix="python3-activitytrack-$V/" -o "dist/python3-activitytrack-$V.tar.gz" HEAD
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: tarball
+          path: dist/*.tar.gz
+          retention-days: 30
+
+  # the packages are attached to the GitHub Release; a version with a suffix is a beta (prerelease).
+  # windows is skipped on a beta tag: that must not stop the release, hence the !failure() test.
+  release:
+    needs: [windows, deb, tarball]
+    if: ${{ !failure() && !cancelled() && github.ref_type == 'tag' && startsWith(github.ref_name, 'v') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with: { path: artifacts, merge-multiple: true }
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V="${GITHUB_REF_NAME#v}"
+          PV=$(sed -n '1s/^[^(]*(\(.*\)).*/\1/p' debian/changelog)
+          R="${PV##*-}"
+          # GitHub turns "~" of an asset's name into ".": "-" instead
+          cd artifacts
+          for f in python3-activitytrack_*~*_all.deb; do mv "$f" "$(echo "$f" | tr '~' '-')"; done
+          sha256sum * > SHA256SUMS && cat SHA256SUMS
+          cd ..
+          {
+            echo "python3-activitytrack $V: the library of ActivityTrack on the PC (desktop, cli, tui)."
+            echo
+            echo "- Debian 13 / 14, Ubuntu 24.04 / 26.04: \`apt install ./python3-activitytrack_${V}-${R}-<distro>_all.deb\`"
+            echo "- Elsewhere: \`pip install git+https://github.com/${GITHUB_REPOSITORY}@v$V\`"
+          } > notes.md
+          case "$V" in *-*) pre=--prerelease ;; *) pre= ;; esac
+          gh release create "v$V" artifacts/* --title "python3-activitytrack $V" --notes-file notes.md $pre
+
+  # GitLab only: the job testvm runs on the owner's test VM runner (tag testvm, an image built by hand there);
+  # GitHub's hosted runners do the same checks in the job linux.

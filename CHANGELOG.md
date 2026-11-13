@@ -4,7 +4,7 @@ What changes in behaviour, compatibility and features, release by release. Bug f
 listed one by one (read `git log` or the issues); security fixes are, under "Security", with
 their issue.
 
-## 1.0.0 (pre-release: alfa-1, alfa-2)
+## 1.0.0 (pre-release: alfa-1, alfa-2, beta-1)
 
 The 1.0.0 release is in pre-release. This list is cumulative: it grows with each pre-release
 and is final at the release.

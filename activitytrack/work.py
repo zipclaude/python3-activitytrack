@@ -413,8 +413,8 @@ class Work:
             elif cmd is not None:
                 self.suspend(e["uid"], at=when)
 
-    def _step(self, uid, cmd, at=None, exact=False, source=TRACKED):
-        """One command of the state machine; (the status after it, the instant)."""
+    def _step(self, uid, cmd, at=None, exact=False, source=TRACKED, others=True):
+        """One command of the state machine; (the status after it, the instant). [others]: suspend them (below)."""
         e = self._live(uid)
         if e.get("kind") == ABSENCE:
             raise WorkError("illegal", f"{cmd} in an absence")
@@ -447,7 +447,7 @@ class Work:
         self._touch(uid, fields, at=min(when, now))
         # without concurrent activities what goes back to work or travel suspends the others,
         # as a new start does (app issue #132)
-        if mode in (WORK, TRAVEL) and not self.policy.feature("concurrentEntries"):
+        if others and mode in (WORK, TRAVEL) and not self.policy.feature("concurrentEntries"):
             for other in self.running():
                 if other["uid"] != uid and self.open_segment(other["uid"]) is not None:
                     self.suspend(other["uid"], at=when)
@@ -538,9 +538,13 @@ class Work:
                              "notes": bool(f.get("notes", e.get("notes"))),
                              "tags": bool(f.get("tags", e.get("tags")))})
         when = req.start_ms if req.start_ms is not None else self._new_instant(now, req.mode)
-        self._make_room(req.others, when)
+        # as for a new activity: one already over does not interrupt what is running now
+        past = req.end_ms is not None and req.end_ms <= now
+        if not past:
+            self._make_room(req.others, when)
         self._touch(req.todo, f)
-        self._step(req.todo, req.mode, at=req.start_ms, source=MANUAL if req.start_ms is not None else TRACKED)
+        self._step(req.todo, req.mode, at=req.start_ms, source=MANUAL if req.start_ms is not None else TRACKED,
+                   others=not past)
         if req.end_ms is not None and req.end_ms <= now:
             self._step(req.todo, STOP, at=req.end_ms, exact=True)
         return req.todo

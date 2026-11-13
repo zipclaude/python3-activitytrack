@@ -42,6 +42,7 @@ The job `windows` of `.gitlab-ci.yml` runs the same tests on Windows (paid share
 ## 3. A release touches
 
 - `activitytrack/__init__.py` (version), `debian/changelog` (`X.Y.Z-1`; a beta is `X.Y.Z~beta-N-1`).
+- `CHANGELOG.md` (upstream changelog, installed by `dh_installchangelogs`): the section of the release, only changes in behaviour, compatibility and features. Bug fixes are not listed one by one: a single line "Various bug fixes." per release; only security fixes are listed, under "Security", with their issue number.
 - The tag `vX.Y.Z` is what the cli, tui and desktop name in `.gitlab/lib-ref`: release the library **first**.
 
 ## 4. GitHub backup

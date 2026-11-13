@@ -1180,6 +1180,275 @@
 				],
 				"external_ref": []
 			}
+		},
+		{
+			"name": "windows whose end is not after their start are ignored and lunch breaks merged before the day's working hours are computed",
+			"zone": "Europe/Rome",
+			"before": {
+				"todo": [
+					{"created_utc_ms": 1793606400000, "done": 0, "id": 1, "kind": "ABSENCE", "plan_end_epoch_day": 20774, "plan_epoch_day": 20773, "refs": "", "title": "Assenza", "uid": "c38-t1", "updated_utc_ms": 1793606401000}
+				],
+				"work_schedule": [
+					{"day_of_week": 1, "end_min": 1020, "start_min": 480},
+					{"day_of_week": 1, "end_min": 600, "start_min": 900},
+					{"day_of_week": 1, "end_min": 300, "start_min": 300},
+					{"day_of_week": 2, "end_min": 1020, "start_min": 480}
+				],
+				"lunch_break": [
+					{"day_of_week": 1, "end_min": 720, "start_min": 780},
+					{"day_of_week": 2, "end_min": 780, "start_min": 720},
+					{"day_of_week": 2, "end_min": 840, "start_min": 760},
+					{"day_of_week": 2, "end_min": 870, "start_min": 840},
+					{"day_of_week": 2, "end_min": 600, "start_min": 600}
+				]
+			},
+			"after": {
+				"time_entry": [
+					{"absence_kind": "ABSENCE", "activity": "Assenza", "closed_utc_ms": 1794931200000, "created_utc_ms": 1793606400000, "kind": "ABSENCE", "needs_review": 0, "priority": 0, "status": "CLOSED", "uid": "c38-t1", "unanswered_reminders": 0, "updated_utc_ms": 1793606401000, "zone_id": "Europe/Rome"}
+				],
+				"segment": [
+					{"end_utc_ms": 1794844800000, "entry_uid": "c38-t1", "kind": "ABSENCE", "planned": 0, "source": "MANUAL", "start_utc_ms": 1794812400000, "uid": "baf189c6-3d7c-5ec4-b4d2-96791719cb80", "zone_id": "Europe/Rome"},
+					{"end_utc_ms": 1794913200000, "entry_uid": "c38-t1", "kind": "ABSENCE", "planned": 0, "source": "MANUAL", "start_utc_ms": 1794898800000, "uid": "7e274c9c-1c93-5a63-80df-7d79e1f640c7", "zone_id": "Europe/Rome"},
+					{"end_utc_ms": 1794931200000, "entry_uid": "c38-t1", "kind": "ABSENCE", "planned": 0, "source": "MANUAL", "start_utc_ms": 1794922200000, "uid": "b86844ad-6611-5903-8d24-24f6a74e4909", "zone_id": "Europe/Rome"}
+				],
+				"external_ref": []
+			}
+		},
+		{
+			"name": "a working window inside the spring-forward gap (Europe/Rome 2026-03-29 02:00-03:00) gives no segment; n counts the kept ones",
+			"zone": "Europe/Rome",
+			"before": {
+				"todo": [
+					{"created_utc_ms": 1793606400000, "done": 0, "id": 1, "kind": "ABSENCE", "plan_end_epoch_day": 20541, "plan_epoch_day": 20534, "refs": "", "title": "Assenza", "uid": "c39-t1", "updated_utc_ms": 1793606401000}
+				],
+				"work_schedule": [
+					{"day_of_week": 7, "end_min": 300, "start_min": 60}
+				],
+				"lunch_break": [
+					{"day_of_week": 7, "end_min": 120, "start_min": 90},
+					{"day_of_week": 7, "end_min": 240, "start_min": 180}
+				]
+			},
+			"after": {
+				"time_entry": [
+					{"absence_kind": "ABSENCE", "activity": "Assenza", "closed_utc_ms": 1774753200000, "created_utc_ms": 1793606400000, "kind": "ABSENCE", "needs_review": 0, "priority": 0, "status": "CLOSED", "uid": "c39-t1", "unanswered_reminders": 0, "updated_utc_ms": 1793606401000, "zone_id": "Europe/Rome"}
+				],
+				"segment": [
+					{"end_utc_ms": 1774139400000, "entry_uid": "c39-t1", "kind": "ABSENCE", "planned": 0, "source": "MANUAL", "start_utc_ms": 1774137600000, "uid": "c5679669-a6fc-58f9-8417-b374c2f5df11", "zone_id": "Europe/Rome"},
+					{"end_utc_ms": 1774144800000, "entry_uid": "c39-t1", "kind": "ABSENCE", "planned": 0, "source": "MANUAL", "start_utc_ms": 1774141200000, "uid": "27effe2a-911c-5db9-816e-65a2f0dfe6ff", "zone_id": "Europe/Rome"},
+					{"end_utc_ms": 1774152000000, "entry_uid": "c39-t1", "kind": "ABSENCE", "planned": 0, "source": "MANUAL", "start_utc_ms": 1774148400000, "uid": "56b6ca19-0ffd-5d79-ba0c-18fa29aa581b", "zone_id": "Europe/Rome"},
+					{"end_utc_ms": 1774744200000, "entry_uid": "c39-t1", "kind": "ABSENCE", "planned": 0, "source": "MANUAL", "start_utc_ms": 1774742400000, "uid": "f2674d2b-6cc8-5f95-878d-4d31a980399c", "zone_id": "Europe/Rome"},
+					{"end_utc_ms": 1774753200000, "entry_uid": "c39-t1", "kind": "ABSENCE", "planned": 0, "source": "MANUAL", "start_utc_ms": 1774749600000, "uid": "895d0ba2-1d2b-5008-ba4b-7e3f6146b6f1", "zone_id": "Europe/Rome"}
+				],
+				"external_ref": []
+			}
+		},
+		{
+			"name": "a working window ending at the end of the spring-forward gap (02:30-03:00) is inverted on the real clock: no segment",
+			"zone": "Europe/Rome",
+			"before": {
+				"todo": [
+					{"created_utc_ms": 1793606400000, "done": 0, "id": 1, "kind": "ABSENCE", "plan_epoch_day": 20541, "refs": "", "title": "Assenza", "uid": "c40-t1", "updated_utc_ms": 1793606401000}
+				],
+				"work_schedule": [
+					{"day_of_week": 7, "end_min": 300, "start_min": 60}
+				],
+				"lunch_break": [
+					{"day_of_week": 7, "end_min": 150, "start_min": 90},
+					{"day_of_week": 7, "end_min": 240, "start_min": 180}
+				]
+			},
+			"after": {
+				"time_entry": [
+					{"absence_kind": "ABSENCE", "activity": "Assenza", "closed_utc_ms": 1774753200000, "created_utc_ms": 1793606400000, "kind": "ABSENCE", "needs_review": 0, "priority": 0, "status": "CLOSED", "uid": "c40-t1", "unanswered_reminders": 0, "updated_utc_ms": 1793606401000, "zone_id": "Europe/Rome"}
+				],
+				"segment": [
+					{"end_utc_ms": 1774744200000, "entry_uid": "c40-t1", "kind": "ABSENCE", "planned": 0, "source": "MANUAL", "start_utc_ms": 1774742400000, "uid": "98963ffb-0fc0-59cc-85f9-4282cfcb618e", "zone_id": "Europe/Rome"},
+					{"end_utc_ms": 1774753200000, "entry_uid": "c40-t1", "kind": "ABSENCE", "planned": 0, "source": "MANUAL", "start_utc_ms": 1774749600000, "uid": "fc46573c-fc1c-51a1-9e75-8b6e5b98b018", "zone_id": "Europe/Rome"}
+				],
+				"external_ref": []
+			}
+		},
+		{
+			"name": "a task's blank title gives no description, alone or absorbed",
+			"zone": "Europe/Rome",
+			"before": {
+				"time_entry": [
+					{"activity": null, "created_utc_ms": 1793606401000, "id": 1, "status": "CLOSED", "todo_id": 2, "uid": "c41-e1", "updated_utc_ms": 1793610000001, "zone_id": "Europe/Rome"},
+					{"activity": "  ", "created_utc_ms": 1793606402000, "id": 2, "status": "CLOSED", "todo_id": 3, "uid": "c41-e2", "updated_utc_ms": 1793610000002, "zone_id": "Europe/Rome"}
+				],
+				"segment": [
+					{"end_utc_ms": 1793782800000, "entry_id": 1, "id": 1, "kind": "WORK", "source": "TRACKED", "start_utc_ms": 1793779200000, "uid": "seg-1", "zone_id": "Europe/Rome"},
+					{"end_utc_ms": 1793782800000, "entry_id": 2, "id": 2, "kind": "WORK", "source": "TRACKED", "start_utc_ms": 1793779200000, "uid": "seg-2", "zone_id": "Europe/Rome"}
+				],
+				"todo": [
+					{"created_utc_ms": 1793606400000, "done": 0, "id": 1, "refs": "", "title": "   ", "uid": "c41-t1", "updated_utc_ms": 1793606401000},
+					{"created_utc_ms": 1793606400000, "done": 1, "done_utc_ms": 1793606400000, "id": 2, "refs": "", "title": "\t", "uid": "c41-t2", "updated_utc_ms": 1793606401000},
+					{"created_utc_ms": 1793606400000, "done": 1, "done_utc_ms": 1793606400000, "id": 3, "refs": "", "title": "\u00a0", "uid": "c41-t3", "updated_utc_ms": 1793606401000}
+				]
+			},
+			"after": {
+				"time_entry": [
+					{"closed_utc_ms": 1793782800000, "created_utc_ms": 1793606401000, "kind": "ACTIVITY", "needs_review": 0, "priority": 0, "status": "CLOSED", "uid": "c41-e1", "unanswered_reminders": 0, "updated_utc_ms": 1793610000001, "zone_id": "Europe/Rome"},
+					{"closed_utc_ms": 1793782800000, "created_utc_ms": 1793606402000, "kind": "ACTIVITY", "needs_review": 0, "priority": 0, "status": "CLOSED", "uid": "c41-e2", "unanswered_reminders": 0, "updated_utc_ms": 1793610000002, "zone_id": "Europe/Rome"},
+					{"created_utc_ms": 1793606400000, "kind": "ACTIVITY", "needs_review": 0, "priority": 0, "status": "TODO", "uid": "c41-t1", "unanswered_reminders": 0, "updated_utc_ms": 1793606401000, "zone_id": "Europe/Rome"}
+				],
+				"segment": [
+					{"end_utc_ms": 1793782800000, "entry_uid": "c41-e1", "kind": "WORK", "planned": 0, "source": "TRACKED", "start_utc_ms": 1793779200000, "uid": "seg-1", "zone_id": "Europe/Rome"},
+					{"end_utc_ms": 1793782800000, "entry_uid": "c41-e2", "kind": "WORK", "planned": 0, "source": "TRACKED", "start_utc_ms": 1793779200000, "uid": "seg-2", "zone_id": "Europe/Rome"}
+				],
+				"external_ref": []
+			}
+		},
+		{
+			"name": "refs are split on LF, CRLF and CR only; other line and paragraph separators stay inside the value, U+0085 is not trimmed",
+			"zone": "Europe/Rome",
+			"before": {
+				"todo": [
+					{"created_utc_ms": 1793606400000, "done": 0, "id": 1, "refs": "A-1\u000bA-2\fA-3\u001cA-4\u001dA-5\u001eA-6\u0085A-7\u2028A-8\u2029A-9\r\nB-1\rB-2\nB-3\r\n\r\n C-1\u00a0\nC-2\u0085\n\u0085", "title": "Separatori", "uid": "c42-t1", "updated_utc_ms": 1793606401000}
+				]
+			},
+			"after": {
+				"time_entry": [
+					{"activity": "Separatori", "created_utc_ms": 1793606400000, "kind": "ACTIVITY", "needs_review": 0, "priority": 0, "status": "TODO", "uid": "c42-t1", "unanswered_reminders": 0, "updated_utc_ms": 1793606401000, "zone_id": "Europe/Rome"}
+				],
+				"segment": [],
+				"external_ref": [
+					{"entry_uid": "c42-t1", "kind": "OTHER", "uid": "22268589-30a4-5ac7-bead-75f0029ca8b8", "value": "\u0085"},
+					{"entry_uid": "c42-t1", "kind": "OTHER", "uid": "51b53418-12eb-594b-b428-b5fc43e15bed", "value": "A-1\u000bA-2\fA-3\u001cA-4\u001dA-5\u001eA-6\u0085A-7\u2028A-8\u2029A-9"},
+					{"entry_uid": "c42-t1", "kind": "TICKET", "uid": "693d5425-f93c-5e6f-893a-596f85ddb80f", "value": "B-1"},
+					{"entry_uid": "c42-t1", "kind": "TICKET", "uid": "90eb4f4c-5b0b-5592-896a-9fed30924d90", "value": "C-1"},
+					{"entry_uid": "c42-t1", "kind": "OTHER", "uid": "aa48dfe2-fba8-5afe-8a8f-037a4d7b3109", "value": "C-2\u0085"},
+					{"entry_uid": "c42-t1", "kind": "TICKET", "uid": "dd2de791-54cc-5c0d-80b6-995791172843", "value": "B-2"},
+					{"entry_uid": "c42-t1", "kind": "TICKET", "uid": "ebc0b5a6-0cd2-537c-b2c0-87cce0cecc24", "value": "B-3"}
+				]
+			}
+		},
+		{
+			"name": "absence kind from the title: whitespace with the no-break space trimmed, case compared by lower case (not case folding)",
+			"zone": "Europe/Rome",
+			"before": {
+				"todo": [
+					{"created_utc_ms": 1793606400000, "done": 0, "id": 1, "kind": "ABSENCE", "plan_epoch_day": 20775, "refs": "", "title": "\u00a0Ferie\u00a0", "uid": "c43-t1", "updated_utc_ms": 1793606401000},
+					{"created_utc_ms": 1793606400000, "done": 0, "id": 2, "kind": "ABSENCE", "plan_epoch_day": 20775, "refs": "", "title": "\u2007Urlaub\u202f", "uid": "c43-t2", "updated_utc_ms": 1793606401000},
+					{"created_utc_ms": 1793606400000, "done": 0, "id": 3, "kind": "ABSENCE", "plan_epoch_day": 20775, "refs": "", "title": "\tMalattia\n", "uid": "c43-t3", "updated_utc_ms": 1793606401000},
+					{"created_utc_ms": 1793606400000, "done": 0, "id": 4, "kind": "ABSENCE", "plan_epoch_day": 20775, "refs": "", "title": "Krankheit", "uid": "c43-t4", "updated_utc_ms": 1793606401000},
+					{"created_utc_ms": 1793606400000, "done": 0, "id": 5, "kind": "ABSENCE", "plan_epoch_day": 20775, "refs": "", "title": "MALATTIA", "uid": "c43-t5", "updated_utc_ms": 1793606401000},
+					{"created_utc_ms": 1793606400000, "done": 0, "id": 6, "kind": "ABSENCE", "plan_epoch_day": 20775, "refs": "", "title": "Vacacioneſ", "uid": "c43-t6", "updated_utc_ms": 1793606401000},
+					{"created_utc_ms": 1793606400000, "done": 0, "id": 7, "kind": "ABSENCE", "plan_epoch_day": 20775, "refs": "", "title": "ſick leave", "uid": "c43-t7", "updated_utc_ms": 1793606401000},
+					{"created_utc_ms": 1793606400000, "done": 0, "id": 8, "kind": "ABSENCE", "plan_epoch_day": 20775, "refs": "", "title": "Ferie\u0085", "uid": "c43-t8", "updated_utc_ms": 1793606401000},
+					{"created_utc_ms": 1793606400000, "done": 0, "id": 9, "kind": "ABSENCE", "plan_epoch_day": 20775, "refs": "", "title": "Permesso\u200b", "uid": "c43-t9", "updated_utc_ms": 1793606401000},
+					{"created_utc_ms": 1793606400000, "done": 0, "id": 10, "kind": "ABSENCE", "plan_epoch_day": 20775, "refs": "", "title": "\u0085", "uid": "c43-t10", "updated_utc_ms": 1793606401000},
+					{"created_utc_ms": 1793606400000, "done": 0, "id": 11, "kind": "ABSENCE", "plan_epoch_day": 20775, "refs": "", "title": "\u00a0", "uid": "c43-t11", "updated_utc_ms": 1793606401000},
+					{"created_utc_ms": 1793606400000, "done": 0, "id": 12, "kind": "ABSENCE", "plan_epoch_day": 20775, "refs": "", "title": "\u1680\u2028Holiday\u205f\u3000", "uid": "c43-t12", "updated_utc_ms": 1793606401000},
+					{"created_utc_ms": 1793606400000, "done": 0, "id": 13, "kind": "ABSENCE", "plan_epoch_day": 20775, "refs": "", "title": "\u001cLeave\u001f", "uid": "c43-t13", "updated_utc_ms": 1793606401000},
+					{"created_utc_ms": 1793606400000, "done": 0, "id": 14, "kind": "ABSENCE", "plan_epoch_day": 20775, "refs": "", "title": "\u2029Permiso\u2000\u200a", "uid": "c43-t14", "updated_utc_ms": 1793606401000}
+				],
+				"work_schedule": [
+					{"day_of_week": 1, "end_min": 1080, "start_min": 540},
+					{"day_of_week": 2, "end_min": 1080, "start_min": 540},
+					{"day_of_week": 3, "end_min": 1080, "start_min": 540},
+					{"day_of_week": 4, "end_min": 1080, "start_min": 540},
+					{"day_of_week": 5, "end_min": 1080, "start_min": 540}
+				],
+				"lunch_break": [
+					{"day_of_week": 1, "end_min": 840, "start_min": 750},
+					{"day_of_week": 2, "end_min": 840, "start_min": 750},
+					{"day_of_week": 3, "end_min": 840, "start_min": 750},
+					{"day_of_week": 4, "end_min": 840, "start_min": 750},
+					{"day_of_week": 5, "end_min": 840, "start_min": 750}
+				]
+			},
+			"after": {
+				"time_entry": [
+					{"absence_kind": "HOLIDAY", "activity": "\u00a0Ferie\u00a0", "closed_utc_ms": 1795021200000, "created_utc_ms": 1793606400000, "kind": "ABSENCE", "needs_review": 0, "priority": 0, "status": "CLOSED", "uid": "c43-t1", "unanswered_reminders": 0, "updated_utc_ms": 1793606401000, "zone_id": "Europe/Rome"},
+					{"absence_kind": "ABSENCE", "activity": "\u0085", "closed_utc_ms": 1795021200000, "created_utc_ms": 1793606400000, "kind": "ABSENCE", "needs_review": 0, "priority": 0, "status": "CLOSED", "uid": "c43-t10", "unanswered_reminders": 0, "updated_utc_ms": 1793606401000, "zone_id": "Europe/Rome"},
+					{"absence_kind": "ABSENCE", "closed_utc_ms": 1795021200000, "created_utc_ms": 1793606400000, "kind": "ABSENCE", "needs_review": 0, "priority": 0, "status": "CLOSED", "uid": "c43-t11", "unanswered_reminders": 0, "updated_utc_ms": 1793606401000, "zone_id": "Europe/Rome"},
+					{"absence_kind": "HOLIDAY", "activity": "\u1680\u2028Holiday\u205f\u3000", "closed_utc_ms": 1795021200000, "created_utc_ms": 1793606400000, "kind": "ABSENCE", "needs_review": 0, "priority": 0, "status": "CLOSED", "uid": "c43-t12", "unanswered_reminders": 0, "updated_utc_ms": 1793606401000, "zone_id": "Europe/Rome"},
+					{"absence_kind": "LEAVE", "activity": "\u001cLeave\u001f", "closed_utc_ms": 1795021200000, "created_utc_ms": 1793606400000, "kind": "ABSENCE", "needs_review": 0, "priority": 0, "status": "CLOSED", "uid": "c43-t13", "unanswered_reminders": 0, "updated_utc_ms": 1793606401000, "zone_id": "Europe/Rome"},
+					{"absence_kind": "LEAVE", "activity": "\u2029Permiso\u2000\u200a", "closed_utc_ms": 1795021200000, "created_utc_ms": 1793606400000, "kind": "ABSENCE", "needs_review": 0, "priority": 0, "status": "CLOSED", "uid": "c43-t14", "unanswered_reminders": 0, "updated_utc_ms": 1793606401000, "zone_id": "Europe/Rome"},
+					{"absence_kind": "HOLIDAY", "activity": "\u2007Urlaub\u202f", "closed_utc_ms": 1795021200000, "created_utc_ms": 1793606400000, "kind": "ABSENCE", "needs_review": 0, "priority": 0, "status": "CLOSED", "uid": "c43-t2", "unanswered_reminders": 0, "updated_utc_ms": 1793606401000, "zone_id": "Europe/Rome"},
+					{"absence_kind": "SICK", "activity": "\tMalattia\n", "closed_utc_ms": 1795021200000, "created_utc_ms": 1793606400000, "kind": "ABSENCE", "needs_review": 0, "priority": 0, "status": "CLOSED", "uid": "c43-t3", "unanswered_reminders": 0, "updated_utc_ms": 1793606401000, "zone_id": "Europe/Rome"},
+					{"absence_kind": "SICK", "activity": "Krankheit", "closed_utc_ms": 1795021200000, "created_utc_ms": 1793606400000, "kind": "ABSENCE", "needs_review": 0, "priority": 0, "status": "CLOSED", "uid": "c43-t4", "unanswered_reminders": 0, "updated_utc_ms": 1793606401000, "zone_id": "Europe/Rome"},
+					{"absence_kind": "SICK", "activity": "MALATTIA", "closed_utc_ms": 1795021200000, "created_utc_ms": 1793606400000, "kind": "ABSENCE", "needs_review": 0, "priority": 0, "status": "CLOSED", "uid": "c43-t5", "unanswered_reminders": 0, "updated_utc_ms": 1793606401000, "zone_id": "Europe/Rome"},
+					{"absence_kind": "ABSENCE", "activity": "Vacacioneſ", "closed_utc_ms": 1795021200000, "created_utc_ms": 1793606400000, "kind": "ABSENCE", "needs_review": 0, "priority": 0, "status": "CLOSED", "uid": "c43-t6", "unanswered_reminders": 0, "updated_utc_ms": 1793606401000, "zone_id": "Europe/Rome"},
+					{"absence_kind": "ABSENCE", "activity": "ſick leave", "closed_utc_ms": 1795021200000, "created_utc_ms": 1793606400000, "kind": "ABSENCE", "needs_review": 0, "priority": 0, "status": "CLOSED", "uid": "c43-t7", "unanswered_reminders": 0, "updated_utc_ms": 1793606401000, "zone_id": "Europe/Rome"},
+					{"absence_kind": "ABSENCE", "activity": "Ferie\u0085", "closed_utc_ms": 1795021200000, "created_utc_ms": 1793606400000, "kind": "ABSENCE", "needs_review": 0, "priority": 0, "status": "CLOSED", "uid": "c43-t8", "unanswered_reminders": 0, "updated_utc_ms": 1793606401000, "zone_id": "Europe/Rome"},
+					{"absence_kind": "ABSENCE", "activity": "Permesso\u200b", "closed_utc_ms": 1795021200000, "created_utc_ms": 1793606400000, "kind": "ABSENCE", "needs_review": 0, "priority": 0, "status": "CLOSED", "uid": "c43-t9", "unanswered_reminders": 0, "updated_utc_ms": 1793606401000, "zone_id": "Europe/Rome"}
+				],
+				"segment": [
+					{"end_utc_ms": 1795001400000, "entry_uid": "c43-t1", "kind": "ABSENCE", "planned": 0, "source": "MANUAL", "start_utc_ms": 1794988800000, "uid": "9bb5bfa3-d886-53ce-b9df-e3002d98862a", "zone_id": "Europe/Rome"},
+					{"end_utc_ms": 1795021200000, "entry_uid": "c43-t1", "kind": "ABSENCE", "planned": 0, "source": "MANUAL", "start_utc_ms": 1795006800000, "uid": "43f0a7a0-6738-5f7b-af5a-ff4a25e609a2", "zone_id": "Europe/Rome"},
+					{"end_utc_ms": 1795001400000, "entry_uid": "c43-t10", "kind": "ABSENCE", "planned": 0, "source": "MANUAL", "start_utc_ms": 1794988800000, "uid": "d7e2c797-d0c8-5374-ac6e-3b0d52655284", "zone_id": "Europe/Rome"},
+					{"end_utc_ms": 1795021200000, "entry_uid": "c43-t10", "kind": "ABSENCE", "planned": 0, "source": "MANUAL", "start_utc_ms": 1795006800000, "uid": "cc4809e5-16e4-581c-b389-12e9b8757ceb", "zone_id": "Europe/Rome"},
+					{"end_utc_ms": 1795001400000, "entry_uid": "c43-t11", "kind": "ABSENCE", "planned": 0, "source": "MANUAL", "start_utc_ms": 1794988800000, "uid": "8135b0b9-13c4-50e5-9d68-2bdd19bab67d", "zone_id": "Europe/Rome"},
+					{"end_utc_ms": 1795021200000, "entry_uid": "c43-t11", "kind": "ABSENCE", "planned": 0, "source": "MANUAL", "start_utc_ms": 1795006800000, "uid": "5dd7bf46-3ff0-5978-a0cd-b541fae11ffe", "zone_id": "Europe/Rome"},
+					{"end_utc_ms": 1795001400000, "entry_uid": "c43-t12", "kind": "ABSENCE", "planned": 0, "source": "MANUAL", "start_utc_ms": 1794988800000, "uid": "58343429-8a55-5e57-9131-a87603307718", "zone_id": "Europe/Rome"},
+					{"end_utc_ms": 1795021200000, "entry_uid": "c43-t12", "kind": "ABSENCE", "planned": 0, "source": "MANUAL", "start_utc_ms": 1795006800000, "uid": "6844dd98-7a52-51dc-a3b1-17f0487dd522", "zone_id": "Europe/Rome"},
+					{"end_utc_ms": 1795001400000, "entry_uid": "c43-t13", "kind": "ABSENCE", "planned": 0, "source": "MANUAL", "start_utc_ms": 1794988800000, "uid": "fa8a1f2f-dc87-5910-a84a-f23cca34ba81", "zone_id": "Europe/Rome"},
+					{"end_utc_ms": 1795021200000, "entry_uid": "c43-t13", "kind": "ABSENCE", "planned": 0, "source": "MANUAL", "start_utc_ms": 1795006800000, "uid": "3e3400c5-ad6d-576e-a726-5dcd931149a3", "zone_id": "Europe/Rome"},
+					{"end_utc_ms": 1795001400000, "entry_uid": "c43-t14", "kind": "ABSENCE", "planned": 0, "source": "MANUAL", "start_utc_ms": 1794988800000, "uid": "bcc75997-b268-5de2-a64b-1e7073614d39", "zone_id": "Europe/Rome"},
+					{"end_utc_ms": 1795021200000, "entry_uid": "c43-t14", "kind": "ABSENCE", "planned": 0, "source": "MANUAL", "start_utc_ms": 1795006800000, "uid": "a178dd63-3835-58a3-b623-bda0a379b5fd", "zone_id": "Europe/Rome"},
+					{"end_utc_ms": 1795001400000, "entry_uid": "c43-t2", "kind": "ABSENCE", "planned": 0, "source": "MANUAL", "start_utc_ms": 1794988800000, "uid": "f501724d-a686-523a-aa99-91281b6247a5", "zone_id": "Europe/Rome"},
+					{"end_utc_ms": 1795021200000, "entry_uid": "c43-t2", "kind": "ABSENCE", "planned": 0, "source": "MANUAL", "start_utc_ms": 1795006800000, "uid": "116f5fd5-4e81-5ef3-a62e-ac64c62141da", "zone_id": "Europe/Rome"},
+					{"end_utc_ms": 1795001400000, "entry_uid": "c43-t3", "kind": "ABSENCE", "planned": 0, "source": "MANUAL", "start_utc_ms": 1794988800000, "uid": "9df17cb6-f63a-5ab0-91e5-d5a6c0e20cfa", "zone_id": "Europe/Rome"},
+					{"end_utc_ms": 1795021200000, "entry_uid": "c43-t3", "kind": "ABSENCE", "planned": 0, "source": "MANUAL", "start_utc_ms": 1795006800000, "uid": "479f6250-51e2-5723-9c6b-d8c5fe13f218", "zone_id": "Europe/Rome"},
+					{"end_utc_ms": 1795001400000, "entry_uid": "c43-t4", "kind": "ABSENCE", "planned": 0, "source": "MANUAL", "start_utc_ms": 1794988800000, "uid": "f0a4052e-f1d9-5b3b-a151-5880266123eb", "zone_id": "Europe/Rome"},
+					{"end_utc_ms": 1795021200000, "entry_uid": "c43-t4", "kind": "ABSENCE", "planned": 0, "source": "MANUAL", "start_utc_ms": 1795006800000, "uid": "79bac4f8-0333-5be5-b263-c4b60c3b7456", "zone_id": "Europe/Rome"},
+					{"end_utc_ms": 1795001400000, "entry_uid": "c43-t5", "kind": "ABSENCE", "planned": 0, "source": "MANUAL", "start_utc_ms": 1794988800000, "uid": "9a7c94bc-bf12-57b1-bddd-000afbf53612", "zone_id": "Europe/Rome"},
+					{"end_utc_ms": 1795021200000, "entry_uid": "c43-t5", "kind": "ABSENCE", "planned": 0, "source": "MANUAL", "start_utc_ms": 1795006800000, "uid": "7c84a0df-f89a-592d-b27b-4cb5163cad46", "zone_id": "Europe/Rome"},
+					{"end_utc_ms": 1795001400000, "entry_uid": "c43-t6", "kind": "ABSENCE", "planned": 0, "source": "MANUAL", "start_utc_ms": 1794988800000, "uid": "5e715698-6c64-536a-aedd-3a6c422717e2", "zone_id": "Europe/Rome"},
+					{"end_utc_ms": 1795021200000, "entry_uid": "c43-t6", "kind": "ABSENCE", "planned": 0, "source": "MANUAL", "start_utc_ms": 1795006800000, "uid": "58bbbb47-4a01-5d7f-82eb-62cfdae63520", "zone_id": "Europe/Rome"},
+					{"end_utc_ms": 1795001400000, "entry_uid": "c43-t7", "kind": "ABSENCE", "planned": 0, "source": "MANUAL", "start_utc_ms": 1794988800000, "uid": "8f20c661-d397-5ca9-891c-b74022cdfb16", "zone_id": "Europe/Rome"},
+					{"end_utc_ms": 1795021200000, "entry_uid": "c43-t7", "kind": "ABSENCE", "planned": 0, "source": "MANUAL", "start_utc_ms": 1795006800000, "uid": "933da961-7e41-5f01-9595-b35664b5f0dd", "zone_id": "Europe/Rome"},
+					{"end_utc_ms": 1795001400000, "entry_uid": "c43-t8", "kind": "ABSENCE", "planned": 0, "source": "MANUAL", "start_utc_ms": 1794988800000, "uid": "76833a82-bb42-59b9-b325-f47bba9deceb", "zone_id": "Europe/Rome"},
+					{"end_utc_ms": 1795021200000, "entry_uid": "c43-t8", "kind": "ABSENCE", "planned": 0, "source": "MANUAL", "start_utc_ms": 1795006800000, "uid": "c49f6ab6-5e30-5379-a4ba-b46de170694e", "zone_id": "Europe/Rome"},
+					{"end_utc_ms": 1795001400000, "entry_uid": "c43-t9", "kind": "ABSENCE", "planned": 0, "source": "MANUAL", "start_utc_ms": 1794988800000, "uid": "887b931b-dc6d-5e6a-91bb-12ceaa1639a6", "zone_id": "Europe/Rome"},
+					{"end_utc_ms": 1795021200000, "entry_uid": "c43-t9", "kind": "ABSENCE", "planned": 0, "source": "MANUAL", "start_utc_ms": 1795006800000, "uid": "2d371746-f493-52ad-9689-6cbbb900139d", "zone_id": "Europe/Rome"}
+				],
+				"external_ref": []
+			}
+		},
+		{
+			"name": "mode: of two open segments with the same start the one with the higher id (then uid) wins",
+			"zone": "Europe/Rome",
+			"before": {
+				"time_entry": [
+					{"created_utc_ms": 1793606401000, "id": 1, "mode": "WORK", "status": "ACTIVE", "uid": "c44-e1", "updated_utc_ms": 1793610000001, "zone_id": "Europe/Rome"}
+				],
+				"segment": [
+					{"end_utc_ms": null, "entry_id": 1, "id": 2, "kind": "TRAVEL", "source": "TRACKED", "start_utc_ms": 1793779200000, "uid": "c44-s2", "zone_id": "Europe/Rome"},
+					{"end_utc_ms": null, "entry_id": 1, "id": 1, "kind": "WORK", "source": "TRACKED", "start_utc_ms": 1793779200000, "uid": "c44-s1", "zone_id": "Europe/Rome"}
+				]
+			},
+			"after": {
+				"time_entry": [
+					{"created_utc_ms": 1793606401000, "kind": "ACTIVITY", "mode": "TRAVEL", "needs_review": 0, "priority": 0, "status": "RUNNING", "uid": "c44-e1", "unanswered_reminders": 0, "updated_utc_ms": 1793610000001, "zone_id": "Europe/Rome"}
+				],
+				"segment": [
+					{"entry_uid": "c44-e1", "kind": "WORK", "planned": 0, "source": "TRACKED", "start_utc_ms": 1793779200000, "uid": "c44-s1", "zone_id": "Europe/Rome"},
+					{"entry_uid": "c44-e1", "kind": "TRAVEL", "planned": 0, "source": "TRACKED", "start_utc_ms": 1793779200000, "uid": "c44-s2", "zone_id": "Europe/Rome"}
+				],
+				"external_ref": []
+			}
+		},
+		{
+			"name": "a done to-do with done_utc_ms = 0 closes at 0: only a missing time falls back to the last update",
+			"zone": "Europe/Rome",
+			"before": {
+				"todo": [
+					{"created_utc_ms": 1793606400000, "done": 1, "done_utc_ms": 0, "id": 1, "refs": "", "title": "Chiusa a zero", "uid": "c45-t1", "updated_utc_ms": 1793606401000},
+					{"created_utc_ms": 1793606400000, "done": 1, "id": 2, "refs": "", "title": "Chiusa senza ora", "uid": "c45-t2", "updated_utc_ms": 1793606401000}
+				]
+			},
+			"after": {
+				"time_entry": [
+					{"activity": "Chiusa a zero", "closed_utc_ms": 0, "created_utc_ms": 1793606400000, "kind": "ACTIVITY", "needs_review": 0, "priority": 0, "status": "CLOSED", "uid": "c45-t1", "unanswered_reminders": 0, "updated_utc_ms": 1793606401000, "zone_id": "Europe/Rome"},
+					{"activity": "Chiusa senza ora", "closed_utc_ms": 1793606401000, "created_utc_ms": 1793606400000, "kind": "ACTIVITY", "needs_review": 0, "priority": 0, "status": "CLOSED", "uid": "c45-t2", "unanswered_reminders": 0, "updated_utc_ms": 1793606401000, "zone_id": "Europe/Rome"}
+				],
+				"segment": [],
+				"external_ref": []
+			}
 		}
 	]
 }

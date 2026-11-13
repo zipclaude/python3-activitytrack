@@ -4,11 +4,11 @@ The data migration of the activity model 1.0 (app docs/ACTIVITY-MODEL.md §6, 3.
 store: schemas 1 and 2 (to-dos, absences, entries linked to a to-do) become schema 3 (the activity).
 
 The part up to `normalize` is the app repository's reference implementation, `scripts/activity_migration.py`
-(branch feature/activity-1.0, commit 2c96bec, GPL-3.0-or-later like this library), kept as it is so that the
-shared cases `docs/samples/activity-migration.json` (tests/data/) pass unchanged: `migrate(rows, zone)` works on the
-tables of the app's database 21 (snake_case columns, epoch days, integer ids). What follows it
-(`migrate_records`) is this library's: it turns the store's wire records into those rows and back, and
-returns what changes.
+(branch feature/activity-1.0, commit 2c96bec, aligned with it again for #22, GPL-3.0-or-later like this library),
+kept as it is so that the shared cases `docs/samples/activity-migration.json` (tests/data/) pass unchanged:
+`migrate(rows, zone)` works on the tables of the app's database 21 (snake_case columns, epoch days, integer ids).
+What follows it (`migrate_records`) is this library's: it turns the store's wire records into those rows and back,
+and returns what changes.
 
 Conventions (shared with the JSON cases)
 - booleans are 0/1 integers, times are epoch milliseconds, days are epoch days, minutes are
@@ -55,7 +55,15 @@ ABSENCE_LABELS = {
     "LEAVE": ["Permesso", "Leave", "Freistellung", "Permiso"],
     "SICK": ["Malattia", "Sick leave", "Krankheit", "Enfermedad"],
 }
-_LABEL_TO_KIND = {lbl.casefold(): k for k, ls in ABSENCE_LABELS.items() for lbl in ls}
+# compared in lower case, not case folded: Kotlin's lowercase() does not fold (U+017F stays, as U+00DF)
+_LABEL_TO_KIND = {lbl.lower(): k for k, ls in ABSENCE_LABELS.items() for lbl in ls}
+
+# Kotlin's trim() and isBlank(): str.isspace() but for U+0085 (NEXT LINE), which Kotlin keeps
+_WS = ("\t\n\v\f\r\x1c\x1d\x1e\x1f \u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a"
+       "\u2028\u2029\u202f\u205f\u3000")
+# Kotlin's lines(): LF, CRLF and CR only (str.splitlines() also breaks on \v, \f, U+001C-U+001E, U+0085, U+2028,
+# U+2029)
+_LINES_RE = re.compile(r"\r\n|\r|\n")
 
 _URL_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*://\S+$")
 _UUID_RE = re.compile(r"^\{?[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\}?$")
@@ -64,7 +72,7 @@ _TICKET_RE = re.compile(r"^#?([A-Za-z][A-Za-z0-9_]*[-_ ]?)?[0-9]+$")
 
 def classify_ref(value):
     """ExternalRefClassifier.classify (domain/model/ExternalRef.kt)."""
-    v = value.strip()
+    v = _trim(value)
     if _URL_RE.match(v):
         return "URL"
     if _UUID_RE.match(v):
@@ -72,6 +80,11 @@ def classify_ref(value):
     if _TICKET_RE.match(v):
         return "TICKET"
     return "OTHER"
+
+
+def _trim(s):
+    """Kotlin's String.trim(): leading and trailing whitespace off, the no-break spaces included."""
+    return s.strip(_WS)
 
 
 def map_priority(p):
@@ -87,7 +100,7 @@ def map_priority(p):
 
 def absence_kind(title):
     """Section 6 step 2: the title when it is one of the four labels in any language."""
-    return _LABEL_TO_KIND.get((title or "").strip().casefold(), "ABSENCE")
+    return _LABEL_TO_KIND.get(_trim(title or "").lower(), "ABSENCE")
 
 
 def det_uid(base_uid, suffix):
@@ -123,7 +136,7 @@ def _merge_plugin_fields(todo_json, entry_json):
 
 
 def _blank(s):
-    return s is None or not str(s).strip()
+    return s is None or not _trim(str(s))
 
 
 class _Ids:
@@ -191,8 +204,8 @@ def migrate(rows, zone="Europe/Rome"):
 
     def add_ref(entry_n, uid_base, suffix, value, kind=None):
         """One external_ref row unless the entry already has the same value (trimmed)."""
-        value = value.strip()
-        have = {r["value"].strip() for r in refs if r["entry_id"] == entry_n["id"]}
+        value = _trim(value)
+        have = {_trim(r["value"]) for r in refs if r["entry_id"] == entry_n["id"]}
         have |= {r["value"] for r in new_refs if r["entry_id"] == entry_n["id"]}
         if value in have:
             return
@@ -204,8 +217,8 @@ def migrate(rows, zone="Europe/Rome"):
     def todo_ref_values(t):
         # CHOICE: one value per non-blank line, trimmed, duplicates dropped keeping the first
         seen, out = set(), []
-        for line in (t.get("refs") or "").splitlines():
-            v = line.strip()
+        for line in _LINES_RE.split(t.get("refs") or ""):
+            v = _trim(line)
             if v and v not in seen:
                 seen.add(v)
                 out.append(v)
@@ -233,17 +246,21 @@ def migrate(rows, zone="Europe/Rome"):
         if epoch_day in days_off:
             return []
         dow = _day(epoch_day).isoweekday()
+        # as the app's AbsencePlanner: windows whose end is not after their start are ignored, and
+        # those that overlap or touch are merged, the working hours and the lunch breaks alike
+        def merged(windows):
+            out = []
+            for a, b in sorted(w for w in windows if w[1] > w[0]):
+                if out and a <= out[-1][1]:
+                    out[-1] = (out[-1][0], max(out[-1][1], b))
+                else:
+                    out.append((a, b))
+            return out
+        breaks = merged(lunch.get(dow, []))
         out = []
-        # windows that overlap or touch are merged first, as the app's AbsencePlanner does
-        merged = []
-        for a, b in sorted(schedule.get(dow, [])):
-            if merged and a <= merged[-1][1]:
-                merged[-1] = (merged[-1][0], max(merged[-1][1], b))
-            else:
-                merged.append((a, b))
-        for a, b in merged:
+        for a, b in merged(schedule.get(dow, [])):
             cur = a
-            for la, lb in sorted(lunch.get(dow, [])):
+            for la, lb in breaks:
                 if lb <= cur or la >= b:
                     continue
                 if la > cur:
@@ -267,10 +284,11 @@ def migrate(rows, zone="Europe/Rome"):
         last_day = first_day if last_day is None or last_day < first_day else last_day
         for ed in range(first_day, last_day + 1):
             day = _day(ed)
-            for i, (a, b) in enumerate(working_intervals(ed)):
-                # CHOICE: n counts from 0 within the day
-                new_segment(entry_n, _local_ms(day, a, tz), _local_ms(day, b, tz),
-                            det_uid(uid_base, f"abs/{day.isoformat()}/{i}"))
+            # a window in the spring-forward gap is empty or inverted on the real clock: it gives no segment
+            spans = [(_local_ms(day, a, tz), _local_ms(day, b, tz)) for a, b in working_intervals(ed)]
+            for i, (start, end) in enumerate((a, b) for a, b in spans if b > a):
+                # CHOICE: n counts from 0 within the day, the kept segments only
+                new_segment(entry_n, start, end, det_uid(uid_base, f"abs/{day.isoformat()}/{i}"))
 
     # ---- steps 2-3: to-dos -----------------------------------------------------------------
     for t in todos:
@@ -307,12 +325,13 @@ def migrate(rows, zone="Europe/Rome"):
             # none linked -> the to-do itself; all closed and the to-do open -> it stays its own TODO
             a = new_activity(
                 t["uid"], t["created_utc_ms"], t["updated_utc_ms"], company_id=t.get("company_id"),
-                client_id=t.get("client_id"), activity=t["title"], notes=t.get("notes"),
+                client_id=t.get("client_id"), activity=None if _blank(t.get("title")) else t["title"],
+                notes=t.get("notes"),
                 plugin_fields=_merge_plugin_fields(t.get("plugin_fields"), None), status="CLOSED" if done else "TODO",
                 kind="ACTIVITY", closed_utc_ms=t.get("done_utc_ms") if done else None,
                 deleted_utc_ms=t.get("ignored_utc_ms"), **todo_fields,
             )
-            # CHOICE: a done to-do without done_utc_ms closes at its last update
+            # CHOICE: a done to-do without done_utc_ms closes at its last update (0 is a time, not a missing one)
             if done and a["closed_utc_ms"] is None:
                 a["closed_utc_ms"] = t["updated_utc_ms"]
             new_entries.append(a)
@@ -327,7 +346,8 @@ def migrate(rows, zone="Europe/Rome"):
             head.update(todo_fields)
             head["plugin_fields"] = _merge_plugin_fields(t.get("plugin_fields"), head.get("plugin_fields"))
             if _blank(head.get("activity")):
-                head["activity"] = t["title"]
+                # a blank title is no description (as for an absence and a to-do of its own)
+                head["activity"] = None if _blank(t.get("title")) else t["title"]
             if _blank(head.get("notes")):
                 head["notes"] = t.get("notes")
             for c in ("company_id", "client_id"):

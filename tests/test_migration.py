@@ -101,6 +101,11 @@ class ReferenceCasesTest(unittest.TestCase):
         self.assertEqual(priorities, [0, 5, 4, 3, 2, 1, 1, 1, 0, 0])
         self.assertEqual(m.classify_ref(" https://a.b/c "), "URL")
         self.assertEqual(m.absence_kind(" ferie "), "HOLIDAY")
+        # Kotlin's trim(): Python's whitespace but U+0085; lower case, not case folding (#22)
+        self.assertEqual(set(m._WS), {c for c in map(chr, range(0x110000)) if c.isspace()} - {"\x85"})
+        self.assertEqual(m.absence_kind("\u00a0Ferie\u3000"), "HOLIDAY")
+        self.assertEqual(m.absence_kind("Ferie\x85"), "ABSENCE")
+        self.assertEqual(m.absence_kind("\u017fick leave"), "ABSENCE")
 
 
 class RecordCasesTest(unittest.TestCase):

@@ -248,6 +248,7 @@ def migrate(rows, zone="Europe/Rome"):
         dow = _day(epoch_day).isoweekday()
         # as the app's AbsencePlanner: windows whose end is not after their start are ignored, and
         # those that overlap or touch are merged, the working hours and the lunch breaks alike
+
         def merged(windows):
             out = []
             for a, b in sorted(w for w in windows if w[1] > w[0]):

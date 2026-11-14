@@ -27,6 +27,8 @@ def activity_of(case):
         out["closedUtcMs"] = ms(a["closedAt"])
     if a.get("deletedAt"):
         out["deletedUtcMs"] = ms(a["deletedAt"])
+    if a.get("completedAt"):
+        out["completedUtcMs"] = ms(a["completedAt"])
     if a.get("plan"):
         out["planDate"] = a["plan"]["day"]
         out["planStartMin"] = a["plan"].get("startMin")

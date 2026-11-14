@@ -308,6 +308,11 @@ def entry_actions(work, e):
                 out.append(Action(KINDS[other], "switch", other))
         out.append(Action(_("Stop"), "stop"))
     elif status == CLOSED:
+        # an activity of travel only declared complete, and back (§2.4, activitytrack/activitytrack#189)
+        if model.can_complete(e, work.segments(e["uid"])):
+            out.append(Action(_("Completa"), "complete"))
+        if model.can_uncomplete(e):
+            out.append(Action(_("Annulla completamento"), "uncomplete"))
         if not work.real_segments(e["uid"]):
             out.append(Action(_("Da fare"), "untick"))
         out.append(Action(_("Riapri"), "reopen", WORK))

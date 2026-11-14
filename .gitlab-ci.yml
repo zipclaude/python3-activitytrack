@@ -1,10 +1,12 @@
 # CI of python3-activitytrack on GitLab. No pipeline starts on its own (not on pushes or tags; a merge
 # request into next starts one, see workflow below): start one by hand ("Run pipeline" on a branch or tag) or with the pipelines API.
-# The Linux jobs run on the owner's local runner (tag local, set in default below), free of
-# charge. The Windows jobs (shared, paid runners) run only on a version tag, at the release.
+# The Linux jobs run on the owner's runner (tag testvm, set in default below), free of
+# charge. GitLab's Windows job (shared, paid runners) runs only on a stable tag, at the release.
 # Started on a branch a pipeline tests and builds the Debian/Ubuntu packages and the tarball, and
 # publishes nothing; started on a tag vX.Y.Z it also tries everything
-# and publishes the release.
+# and publishes the release. On a pre-release tag (vX.Y.Z-alfa-N, vX.Y.Z-beta-N) the Windows tests run on
+# GitHub instead, free: the GitHub backup's workflow starts by itself on the tag the push mirror brings
+# there, and the release waits for windows-github, which waits for that run to be green.
 
 # A merge request into next also starts a pipeline: only the job linux runs in it, on the local
 # runner (the other jobs need a tag or a pipeline started by hand).
@@ -47,7 +49,8 @@ linux:
 windows:
   stage: test
   tags: [saas-windows-medium-amd64]
-  # Windows only at the release (a version tag): the shared Windows runners are paid
+  # Windows only at a stable release (vX.Y.Z): the shared Windows runners are paid. A pre-release is
+  # tested on GitHub's Windows runners (windows-github)
   rules:
     - if: $TESTVM || $CI_COMMIT_BRANCH =~ /^testvm\//
       when: never
@@ -123,8 +126,38 @@ tarball:
     paths: ["dist/*.tar.gz"]
     expire_in: 30 days
 
+# Pre-releases (vX.Y.Z-alfa-N, vX.Y.Z-beta-N, activitytrack/activitytrack-doc#1): the Windows tests run
+# on GitHub, free. The push mirror brings the tag to the GitHub backup, whose workflow starts by itself on
+# a pre-release tag. This job waits for that run (matched by the tag's commit) and fails unless it is green:
+# the release (next stage) waits for it. The library has no Windows file: only the verdict is taken.
+# Public API: no secret needed; an optional masked variable GITHUB_TOKEN_RO only raises GitHub's rate
+# limit. Script and its options: .gitlab/github-windows-gate.sh.
+# GitHub down: set the project variable WINDOWS_GATE=skip (Settings > CI/CD > Variables: pipeline
+# variables are not allowed in these projects), run the tag pipeline again, remove the variable: the
+# pre-release is then released without a Windows test, as before, and the notes say so.
+windows-github:
+  stage: package
+  # it starts at once and waits for GitHub; the release (next stage) waits for it
+  needs: []
+  image: alpine:3.22
+  rules:
+    - if: $TESTVM || $CI_COMMIT_BRANCH =~ /^testvm\//
+      when: never
+    - if: $WINDOWS_GATE == "skip"
+      when: never
+    - if: $CI_COMMIT_TAG =~ /^v[0-9]+(\.[0-9]+)*-/
+  timeout: 2h
+  variables:
+    GATE_REPO: zipclaude/python3-activitytrack
+  script:
+    - apk add --no-cache curl jq coreutils
+    - sh .gitlab/github-windows-gate.sh
+  artifacts:
+    paths: ["windows-gate.txt"]
+    expire_in: 30 days
+
 # the packages go to the project's Generic Packages and the release links them
-# (permalinks .../-/releases/<tag>/downloads/<file>); a version with a suffix is a beta
+# (permalinks .../-/releases/<tag>/downloads/<file>); a version with a suffix is a pre-release
 release:
   stage: release
   image: alpine:3.22
@@ -148,6 +181,14 @@ release:
       {
         echo "python3-activitytrack $V: the library of ActivityTrack on the PC (desktop, cli, tui)."
         echo
+        case "$V" in
+          *-*) if [ -f windows-gate.txt ]; then
+                 echo "A test release. Tested on real Windows by the GitHub backup's CI: $(sed -n 's/^run=//p' windows-gate.txt)"
+               else
+                 echo "A test release, not tested on Windows (WINDOWS_GATE=skip: the Windows check on GitHub was skipped)."
+               fi
+               echo ;;
+        esac
         echo "- Debian 13 / 14, Ubuntu 24.04 / 26.04: \`apt install ./python3-activitytrack_${V}-${R}-<distro>_all.deb\`"
         echo "- Elsewhere: \`pip install git+$CI_PROJECT_URL@v$V\`"
       } > notes.md

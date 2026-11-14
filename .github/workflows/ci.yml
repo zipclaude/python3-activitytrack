@@ -1,10 +1,15 @@
 # CI of python3-activitytrack on GitHub, the backup of the GitLab project: it mirrors .gitlab-ci.yml
 # (keep the two in step), so the backup can test, package and release on its own if GitLab is unavailable.
-# Nothing runs on its own (not on pushes to other branches, not on tags, not on pull requests): start a
-# run by hand ("Run workflow" on a branch or tag) or push a branch ghtest/<name> (the equivalent of
-# GitLab's testvm/*: it tests a workflow that is not on the default branch yet).
+# One thing runs on its own: the push of a pre-release tag (vX.Y.Z-alfa-N, vX.Y.Z-beta-N), which the push
+# mirror brings here from GitLab (a tag push runs the workflow file of the tagged commit, so it works
+# before this file is on main). Its verdict is the Windows gate of GitLab's pipeline: GitLab's job
+# windows-github waits for this run to be green (activitytrack/activitytrack-doc#1). Everything else
+# starts by hand ("Run workflow" on a branch or a stable tag) or with a push to a branch ghtest/<name>
+# (the equivalent of GitLab's testvm/*: it tests a workflow that is not on the default branch yet);
+# not on other pushes, not on pull requests.
 # Started on a branch a run tests and builds the Debian/Ubuntu packages and the tarball, and
-# publishes nothing; started on a tag vX.Y.Z it also tries everything and publishes the release.
+# publishes nothing; started on a tag it also runs the Windows tests and publishes the release
+# (a pre-release for a tag with a suffix).
 
 name: CI
 
@@ -12,6 +17,8 @@ on:
   workflow_dispatch:
   push:
     branches: ["ghtest/**"]
+    # pre-release tags only (a suffix after the version); stable tags stay by hand
+    tags: ["v*-*"]
 
 permissions:
   contents: read
@@ -20,20 +27,23 @@ env:
   DEBIAN_FRONTEND: noninteractive
 
 jobs:
-  # GitHub has no regular expressions in "if:": the tag test of GitLab's windows job is done here
+  # GitHub has no regular expressions in "if:": the tag tests of GitLab's rules are done here
   stable:
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.check.outputs.tag }}
+      pre: ${{ steps.check.outputs.pre }}
     steps:
       - id: check
         run: |
-          # a stable tag is vX.Y.Z (any number of dot-separated numbers); a suffix (-beta-1, -alfa-2) is not
-          if [ "$GITHUB_REF_TYPE" = tag ] && echo "$GITHUB_REF_NAME" | grep -Eq '^v[0-9]+(\.[0-9]+)*$'; then
-            echo "tag=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "tag=false" >> "$GITHUB_OUTPUT"
+          # a stable tag is vX.Y.Z (any number of dot-separated numbers); a pre-release has a suffix (-beta-1, -alfa-2)
+          tag=false; pre=false
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            if echo "$GITHUB_REF_NAME" | grep -Eq '^v[0-9]+(\.[0-9]+)*$'; then tag=true; fi
+            if echo "$GITHUB_REF_NAME" | grep -Eq '^v[0-9]+(\.[0-9]+)*-'; then pre=true; fi
           fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "pre=$pre" >> "$GITHUB_OUTPUT"
 
   linux:
     # the distributions' packages only: the oldest and the newest of the targets
@@ -57,9 +67,10 @@ jobs:
         run: python3 -m unittest discover -s tests -t . -v
 
   windows:
-    # Windows only at the release (a stable version tag), as on GitLab
+    # Windows on a tag, stable or pre-release (GitLab tests a stable tag itself, on its paid runners, and
+    # takes this run's verdict for a pre-release)
     needs: stable
-    if: needs.stable.outputs.tag == 'true'
+    if: needs.stable.outputs.tag == 'true' || needs.stable.outputs.pre == 'true'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -144,8 +155,8 @@ jobs:
           path: dist/*.tar.gz
           retention-days: 30
 
-  # the packages are attached to the GitHub Release; a version with a suffix is a beta (prerelease).
-  # windows is skipped on a beta tag: that must not stop the release, hence the !failure() test.
+  # the packages are attached to the GitHub Release; a version with a suffix is a pre-release.
+  # windows is skipped on a branch: that must not stop the job, hence the !failure() test.
   release:
     needs: [windows, deb, tarball]
     if: ${{ !failure() && !cancelled() && github.ref_type == 'tag' && startsWith(github.ref_name, 'v') }}
@@ -156,11 +167,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with: { path: artifacts, merge-multiple: true }
-      - name: Publish
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Files and notes
         run: |
-          V="${GITHUB_REF_NAME#v}"
+          # the version of the code (the deb jobs checked it is the tag's)
+          V=$(sed -n 's/^__version__ = "\(.*\)"/\1/p' activitytrack/__init__.py)
+          echo "AT_VERSION=$V" >> "$GITHUB_ENV"
           PV=$(sed -n '1s/^[^(]*(\(.*\)).*/\1/p' debian/changelog)
           R="${PV##*-}"
           # GitHub turns "~" of an asset's name into ".": "-" instead
@@ -174,8 +185,20 @@ jobs:
             echo "- Debian 13 / 14, Ubuntu 24.04 / 26.04: \`apt install ./python3-activitytrack_${V}-${R}-<distro>_all.deb\`"
             echo "- Elsewhere: \`pip install git+https://github.com/${GITHUB_REPOSITORY}@v$V\`"
           } > notes.md
+          ls -l artifacts
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V="$AT_VERSION"
           case "$V" in *-*) pre=--prerelease ;; *) pre= ;; esac
-          gh release create "v$V" artifacts/* --title "python3-activitytrack $V" --notes-file notes.md $pre
+          # a run again (re-run, or a tag moved before GitLab released it) replaces the files of the release
+          if gh release view "v$V" >/dev/null 2>&1; then
+            gh release upload "v$V" artifacts/* --clobber
+            gh release edit "v$V" --title "python3-activitytrack $V" --notes-file notes.md $pre
+          else
+            gh release create "v$V" artifacts/* --title "python3-activitytrack $V" --notes-file notes.md $pre
+          fi
 
   # GitLab only: the job testvm runs on the owner's test VM runner (tag testvm, an image built by hand there);
   # GitHub's hosted runners do the same checks in the job linux.

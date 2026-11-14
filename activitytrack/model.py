@@ -171,11 +171,33 @@ def is_late(a, planned, now, tz):
 
 
 def is_complete(a, segments, missing_required=False):
-    """A CLOSED activity is complete (§2.4)."""
+    """
+    A CLOSED activity is complete (§2.4): no real segment (a ticked task), or a client, some work and
+    every required field, or declared complete (`completedUtcMs`, issue #189) with every required field.
+    """
     segs = real(segments)
     if not segs:
         return True
+    if a.get("completedUtcMs") is not None and not missing_required:
+        return True
     return bool(a.get("clientUid")) and any(s.get("kind") == WORK for s in segs) and not missing_required
+
+
+def can_complete(a, segments):
+    """
+    "Completa" (§3, activitytrack/activitytrack#189): a CLOSED, not deleted ACTIVITY shown INCOMPLETE
+    without any real WORK segment (made of travel only), not declared complete yet. One with work and no
+    client gets a client instead; the required fields do not change the answer (without work it is
+    incomplete anyway).
+    """
+    segs = real(segments)
+    return (a.get("kind", ACTIVITY) == ACTIVITY and a.get("status") == CLOSED and a.get("deletedUtcMs") is None
+            and a.get("completedUtcMs") is None and bool(segs) and not any(s.get("kind") == WORK for s in segs))
+
+
+def can_uncomplete(a):
+    """"Annulla completamento": offered while the completion is set, the activity not deleted."""
+    return a.get("kind", ACTIVITY) == ACTIVITY and a.get("deletedUtcMs") is None and a.get("completedUtcMs") is not None
 
 
 def display(activity, segments, now, zone, missing_required=False):

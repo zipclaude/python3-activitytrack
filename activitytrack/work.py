@@ -7,7 +7,8 @@ see it as any other device's work.
 
 An activity is TODO, RUNNING (with at most one open segment, its `mode`), or CLOSED; an absence is
 CLOSED with ABSENCE segments; any of them may be deleted (in the bin) and restored. The commands are
-start / start_todo, switch, resume, suspend, stop, tick, untick, reopen, delete, restore (perform names them);
+start / start_todo, switch, resume, suspend, stop, tick, untick, reopen, complete, uncomplete, delete, restore
+(perform names them);
 pure rules (displayed state, plan, rounding) are in model.py.
 """
 
@@ -489,7 +490,9 @@ class Work:
         if status == CLOSED:
             fields["closedUtcMs"] = now
         elif e.get("status") == CLOSED:
+            # leaving CLOSED (reopen) clears the closing time and a declared completion (§2.4)
             fields["closedUtcMs"] = None
+            fields["completedUtcMs"] = None
         self._touch(uid, fields, at=min(when, now))
         # without concurrent activities what goes back to work or travel suspends the others,
         # as a new start does (app issue #132)
@@ -655,7 +658,27 @@ class Work:
         e = self._live(uid)
         if e.get("kind") == ABSENCE or e.get("status") != CLOSED or self.real_segments(uid):
             raise WorkError("illegal", "untick")
-        self._touch(uid, {"status": TODO, "mode": None, "closedUtcMs": None})
+        self._touch(uid, {"status": TODO, "mode": None, "closedUtcMs": None, "completedUtcMs": None})
+
+    @atomic
+    def complete(self, uid):
+        """
+        "Completa" (§2.4, §3, activitytrack/activitytrack#189): a closed activity of travel only, shown
+        incomplete, is declared complete now (model.can_complete). A required field left empty still keeps
+        it incomplete.
+        """
+        e = self._live(uid)
+        if not model.can_complete(e, self.segments(uid)):
+            raise WorkError("illegal", "complete")
+        self._touch(uid, {"completedUtcMs": self.clock()})
+
+    @atomic
+    def uncomplete(self, uid):
+        """"Annulla completamento": the declared completion goes (model.can_uncomplete)."""
+        e = self._live(uid)
+        if not model.can_uncomplete(e):
+            raise WorkError("illegal", "uncomplete")
+        self._touch(uid, {"completedUtcMs": None})
 
     @atomic
     def reopen(self, uid, kind=WORK, at=None, exact=False):
@@ -763,8 +786,8 @@ class Work:
     def perform(self, uid, verb, kind=WORK, at=None, exact=False):
         """
         One of the actions of texts.entry_actions by name: start, switch, resume, reopen (opening [kind]),
-        stop, tick, untick, delete, restore. The questions of §3 (travel from work, the return trip) are
-        the interface's: it calls travel_from_work, travel_back or stop(return_trip=) after asking.
+        stop, tick, untick, complete, uncomplete, delete, restore. The questions of §3 (travel from work, the
+        return trip) are the interface's: it calls travel_from_work, travel_back or stop(return_trip=) after asking.
         """
         if verb == "start":
             return self.start_todo(uid, kind, at, exact)
@@ -776,7 +799,7 @@ class Work:
             return self.reopen(uid, kind, at, exact)
         if verb == "stop":
             return self.stop(uid, at, exact)
-        if verb in ("tick", "untick", "delete", "restore"):
+        if verb in ("tick", "untick", "complete", "uncomplete", "delete", "restore"):
             return getattr(self, verb)(uid)
         raise WorkError("illegal", verb)
 

@@ -14,12 +14,13 @@ and is final at the release.
 - The local store is migrated, one way, to the activity model of 1.0 when it is opened: a
   to-do becomes an activity in the state "Da fare" (TODO), an absence becomes an activity of
   kind absence with one segment per working day. Older backups are migrated the same way.
-- Sync uses wire schema 3 and needs a server on 1.0: an older server is not accepted, and a
-  server that finds this PC too old answers `upgrade_required`, which every interface says as
-  "update the app".
+- Sync uses wire schema 4 (3 in alfa-1, alfa-2 and beta-1) and needs a server of the same
+  pre-release: an older server is not accepted, and a server that finds this PC too old answers
+  `upgrade_required`, which every interface says as "update the app". Schema 4 adds the
+  activity's `completedUtcMs` and the attachment's `description`.
 - The 0.9 API of to-dos and absences is gone (the `todos` module and its functions). Use the
   `Work` commands instead: `start`, `switch`, `resume`, `stop`, `reopen`, `delete`, `restore`,
-  `save_todo`, `tick`, `travel_from_work`, `travel_back`, `add_absence`, `add_segment`,
+  `save_todo`, `tick`, `complete`, `uncomplete`, `travel_from_work`, `travel_back`, `add_absence`, `add_segment`,
   `edit_segment`. Suspending is internal (no button): an activity is suspended when another
   one starts.
 - The Debian package `Breaks` the 0.9 interfaces (`activitytrack-cli`, `activitytrack-tui`,
@@ -43,6 +44,10 @@ and is final at the release.
   times rounded to the quantum of each kind of segment, with the rules of the activity model
   (a start rounds down, a stop up, a switch to the nearest of the smaller quantum).
 - Priorities are named (none to emergency); the bin replaces "ignored" for to-dos.
+- An activity made of travel only can be declared complete: the action "Completa" (and
+  "Annulla completamento") of `texts.entry_actions`, `Work.complete` and `Work.uncomplete`;
+  it is then done unless a required field is empty, and reopening it clears the completion
+  (activitytrack/activitytrack#189).
 - Notices API: `Work.take_notices()` returns, translated and cleared, what a command leaves to
   tell the user (an end moved back to the start of a new activity, a planned segment or return
   trip removed); `texts.sync_notices()` and `Store.dismiss_notices()` do the same for the

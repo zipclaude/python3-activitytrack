@@ -148,7 +148,7 @@ class SyncTest(unittest.TestCase):
 
 
 class UpgradeRequiredTest(unittest.TestCase):
-    """The server of schema 3 refuses an older client with `upgrade_required` (ACTIVITY-MODEL.md §6)."""
+    """The server of schema 4 (3 before) refuses an older client with `upgrade_required` (ACTIVITY-MODEL.md §6)."""
 
     def setUp(self):
         self.dir = tempfile.TemporaryDirectory()
@@ -159,9 +159,9 @@ class UpgradeRequiredTest(unittest.TestCase):
         self.store.close()
         self.dir.cleanup()
 
-    def test_the_schema_is_3(self):
+    def test_the_schema_is_4(self):
         from activitytrack import wire
-        self.assertEqual(wire.SCHEMA, 3)
+        self.assertEqual(wire.SCHEMA, 4)
 
     def test_whatever_the_status(self):
         from activitytrack import wire

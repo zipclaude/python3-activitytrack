@@ -462,6 +462,39 @@ class ActionsTest(unittest.TestCase):
         self.assertEqual(self.verbs(t), [("restore", None)])
         self.assertNotIn("suspend", [v for v, _k in self.verbs(t)])
 
+    def test_a_trip_alone_is_completed(self):
+        """activitytrack/activitytrack#189: "Completa" for a closed activity of travel only, and back."""
+        u = self.work.start(StartRequest(mode=TRAVEL))
+        self.now += 30 * MIN
+        self.work.stop(u)
+        self.assertEqual(self.work.display(self.work.entry(u))[0], "INCOMPLETE")
+        self.assertEqual(self.verbs(u)[0], ("complete", None))
+        self.work.perform(u, "complete")
+        self.assertEqual(self.work.entry(u)["completedUtcMs"], self.now)
+        self.assertEqual(self.work.display(self.work.entry(u))[0], "DONE")
+        self.assertEqual(self.verbs(u)[0], ("uncomplete", None))
+        with self.assertRaises(WorkError):
+            self.work.complete(u)
+        self.work.perform(u, "uncomplete")
+        self.assertIsNone(self.work.entry(u)["completedUtcMs"])
+        with self.assertRaises(WorkError):
+            self.work.uncomplete(u)
+        # reopen clears it, in the same change as the status (the server's completed_not_closed)
+        self.work.complete(u)
+        self.now += MIN
+        self.work.reopen(u, TRAVEL)
+        self.assertIsNone(self.work.entry(u)["completedUtcMs"])
+        with self.assertRaises(WorkError):
+            self.work.complete(u)
+
+    def test_work_is_never_declared_complete(self):
+        u = self.work.start(StartRequest(client="lib"))
+        self.now += 30 * MIN
+        self.work.stop(u)
+        self.assertNotIn(("complete", None), self.verbs(u))
+        with self.assertRaises(WorkError):
+            self.work.complete(u)
+
     def test_a_ticked_task_goes_back_to_todo(self):
         t = self.work.save_todo(None, "x")
         self.work.tick(t)

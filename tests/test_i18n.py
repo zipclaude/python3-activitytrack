@@ -3,12 +3,15 @@ import ast
 import importlib
 import importlib.util
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from activitytrack import i18n, model, pairing, texts
 from activitytrack.policy import Policy
+from activitytrack.store import Store
 
 PACKAGE = Path(i18n.__file__).resolve().parent
 
@@ -188,3 +191,78 @@ class CatalogsTest(unittest.TestCase):
         i18n.set_language("en")
         importlib.reload(texts)
         self.assertEqual((texts.SHOWS["TODO"], texts.STATUSES[model.TODO]), ("To-dos", "To do"))
+
+
+class LanguageChoiceTest(unittest.TestCase):
+    """The language is the policy's, else the user's choice, else the system's, else English."""
+
+    def tearDown(self):
+        i18n.set_language("it")
+
+    def system(self, **env):
+        with mock.patch.dict(os.environ, env, clear=True), mock.patch("sys.platform", "linux"), \
+                mock.patch("locale.getlocale", return_value=(None, None)):
+            return i18n.system_language()
+
+    def test_the_language_of_a_locale_name(self):
+        for name, language in (("de_AT", "de"), ("de_DE.UTF-8@euro", "de"), ("de-AT", "de"), ("DE", "de"),
+                               ("it", "it"), ("en_GB", "en"), ("es_MX.UTF-8", "es"), ("fr_FR", None),
+                               ("est", None), ("deu", None), ("C", None), ("POSIX", None), ("", None), (None, None)):
+            self.assertEqual(i18n.language_of(name), language, name)
+
+    def test_another_language_or_none_is_english_not_italian(self):
+        for code in ("fr_FR", "pt", "est", "", None, "C", "POSIX", 7):
+            self.assertEqual(i18n.set_language(code), "en", code)
+            self.assertEqual(i18n._("Pausa"), "Pause")
+
+    def test_the_system_language(self):
+        for env, language in (
+                ({"LANG": "de_AT.UTF-8"}, "de"), ({"LANG": "it_IT"}, "it"), ({"LANG": "es_ES@euro"}, "es"),
+                ({"LANG": "en_US.UTF-8"}, "en"), ({"LANG": "fr_FR.UTF-8"}, "en"),
+                # C and POSIX are no language, and the first variable set decides
+                ({"LANG": "C"}, "en"), ({"LANG": "POSIX"}, "en"), ({"LANG": "C.UTF-8"}, "en"),
+                ({"LC_ALL": "C", "LANG": "de_DE.UTF-8"}, "en"), ({"LC_ALL": "it_IT", "LANG": "C"}, "it"),
+                ({"LC_MESSAGES": "es_MX", "LANG": "de_DE"}, "es"), ({"LC_ALL": "", "LANG": "de_DE"}, "de"),
+                ({}, "en"),
+                # LANGUAGE is a list, the first we have; none we have: English; ignored under C
+                ({"LANG": "de_DE", "LANGUAGE": "fr:es:de"}, "es"), ({"LANG": "de_DE", "LANGUAGE": "fr"}, "en"),
+                ({"LANG": "de_DE", "LANGUAGE": "it_IT:en"}, "it"), ({"LANG": "de_DE", "LANGUAGE": ""}, "de"),
+                ({"LANG": "C", "LANGUAGE": "de"}, "en")):
+            self.assertEqual(self.system(**env), language, env)
+
+    def test_the_default_locale_when_the_environment_says_nothing(self):
+        with mock.patch.dict(os.environ, {}, clear=True), mock.patch("sys.platform", "linux"), \
+                mock.patch("locale.getlocale", return_value=("de_DE", "UTF-8")):
+            self.assertEqual(i18n.system_language(), "de")
+
+    def test_the_choice_without_a_store(self):
+        self.assertEqual(i18n.resolve_language(system="de_AT"), "de")
+        self.assertEqual(i18n.resolve_language(system="fr_FR"), "en")
+        self.assertEqual(i18n.resolve_language(system="C"), "en")
+        with mock.patch("activitytrack.i18n.system_language", return_value="es"):
+            self.assertEqual(i18n.resolve_language(), "es")
+
+    def test_the_policy_wins_over_the_choice_that_wins_over_the_system(self):
+        with tempfile.TemporaryDirectory() as d:
+            store = Store(Path(d) / "a.sqlite3")
+
+            def resolved(policy=None, choice=None, system="de_DE"):
+                ui = {"language": policy} if policy is not None else {}
+                store.set_state("policy", json.dumps({"format": "activitytrack-policy", "schema": 1, "ui": ui}))
+                store.set_state(i18n.PREFERENCE_KEY, choice)
+                return i18n.resolve_language(store, system=system)
+
+            self.assertEqual(resolved(), "de")
+            self.assertEqual(resolved(choice="es"), "es")
+            self.assertEqual(resolved(policy="it", choice="es"), "it")
+            self.assertEqual(resolved(policy="en", choice="es", system="it_IT"), "en")
+            # a value that is not a language of ours is ignored at its step
+            self.assertEqual(resolved(policy="fr", choice="es"), "es")
+            self.assertEqual(resolved(policy="de_AT", choice="es"), "es")
+            self.assertEqual(resolved(policy="fr", choice="xx"), "de")
+            self.assertEqual(resolved(policy="fr", choice="xx", system="fr_FR"), "en")
+            self.assertEqual(resolved(policy=["it"], choice=3, system="C"), "en")
+            # no policy received at all
+            store.set_state("policy", None)
+            self.assertEqual(i18n.resolve_language(store, system="es_ES"), "es")
+            store.close()

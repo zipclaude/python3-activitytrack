@@ -54,6 +54,8 @@ and is final at the release.
   notices of the sync (a change that could not be applied, kept for 7 days unless dismissed).
 - `i18n.pgettext(context, text)`: a text with another translation in a context (the state "Da fare" of
   an activity, "To do", against the list of the to-dos); the catalogs hold it as `context|text`.
+- `i18n.resolve_language(store)`: the language of an interface in one place, the policy's
+  `ui.language`, else the user's choice (state `language`), else the system's, else English.
 
 ### Behaviour
 
@@ -62,6 +64,8 @@ and is final at the release.
   start, with a notice; a planned segment wholly ahead is removed, with a notice, instead of
   being cut to nothing.
 - A paused activity is suspended, not stopped, when another one starts.
+- The language of an interface that does not know the system's is English (it was Italian when the
+  system said nothing, and `LANGUAGE` lists and `C`/`POSIX` were not read as gettext does).
 - The displayed states "Fatta" (done) and "Incompleta" (incomplete) are named as in the app and the web.
 
 Various bug fixes.

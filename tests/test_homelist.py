@@ -5,7 +5,7 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from activitytrack.homelist import DONE, IGNORED, MISSING, TODO, home, sections, startable
+from activitytrack.homelist import DONE, IGNORED, MISSING, SECTIONS, TODO, home, sections, startable
 from activitytrack.model import display, is_late, moment, plan_bounds, postponed
 from activitytrack.policy import Policy
 from activitytrack.store import Store
@@ -105,6 +105,10 @@ class SectionsTest(unittest.TestCase):
         self.assertEqual(out, {"overdue": ["late"], "missing": ["e1"], "today": ["today"], "next": ["tomorrow"],
                                "no_date": ["urgent", "nodate"]})
         out = uids(sections(todos, [missing, closed], {TODO, DONE, IGNORED}, 72, now=now, tz=ROME))
+        order = [s for s, _items in sections(todos, [missing, closed], {TODO, DONE, IGNORED}, 72, now=now, tz=ROME)]
+        self.assertIn("no_date", order)
+        self.assertEqual(order, sorted(order, key=SECTIONS.index))
+        self.assertLess(SECTIONS.index("no_date"), SECTIONS.index("earlier"))
         self.assertEqual(out["today"], ["today", "done", "e2"])
         self.assertEqual(out["next"], ["tomorrow"])
         self.assertEqual(out["ignored"], ["ign"])

@@ -17,7 +17,8 @@ WINDOWS = (-1, 24, 72, 168, 720, 0)
 TODO, MISSING, DONE, IGNORED = "TODO", "MISSING", "DONE", "IGNORED"
 SHOWS = (TODO, MISSING, DONE, IGNORED)
 DEFAULT_SHOW = (TODO, MISSING)
-SECTIONS = ("overdue", "missing", "today", "next", "earlier", "no_date", "ignored")
+# no_date before earlier, as the app: undated to-dos sit between the next days and the previous ones
+SECTIONS = ("overdue", "missing", "today", "next", "no_date", "earlier", "ignored")
 
 
 def sections(todos, stopped, show, window, company=None, tag=None, carry_over_min=360, now=None, tz=None,

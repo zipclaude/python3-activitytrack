@@ -52,6 +52,8 @@ and is final at the release.
   tell the user (an end moved back to the start of a new activity, a planned segment or return
   trip removed); `texts.sync_notices()` and `Store.dismiss_notices()` do the same for the
   notices of the sync (a change that could not be applied, kept for 7 days unless dismissed).
+- `i18n.pgettext(context, text)`: a text with another translation in a context (the state "Da fare" of
+  an activity, "To do", against the list of the to-dos); the catalogs hold it as `context|text`.
 
 ### Behaviour
 
@@ -60,6 +62,7 @@ and is final at the release.
   start, with a notice; a planned segment wholly ahead is removed, with a notice, instead of
   being cut to nothing.
 - A paused activity is suspended, not stopped, when another one starts.
+- The displayed states "Fatta" (done) and "Incompleta" (incomplete) are named as in the app and the web.
 
 Various bug fixes.
 

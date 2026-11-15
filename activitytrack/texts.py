@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from . import formats
-from .i18n import _
+from .i18n import _, pgettext
 from . import model
 from .model import ABSENCE, CLOSED, PAUSE, RUNNING, TODO, TRAVEL, WORK
 
@@ -22,8 +22,9 @@ KINDS = {WORK: _("Lavoro"), PAUSE: _("Pausa"), TRAVEL: _("Viaggio"), ABSENCE: _(
 # the displayed state of an activity (model.display, ACTIVITY-MODEL.md 2.2)
 DISPLAY_STATES = {
     model.DELETED: _("Eliminata"), ABSENCE: _("Assenza"), model.LATE: _("In ritardo"), model.PLANNED: _("Pianificata"),
-    TODO: _("Da fare"), WORK: _("In lavoro"), TRAVEL: _("In viaggio"), PAUSE: _("In pausa"),
-    model.SUSPENDED: _("Sospesa"), model.DONE: _("Chiusa"), model.INCOMPLETE: _("Dettagli mancanti"),
+    TODO: pgettext("stato", "Da fare"), WORK: _("In lavoro"), TRAVEL: _("In viaggio"), PAUSE: _("In pausa"),
+    # as the app's and the web's states "Fatta" and "Incompleta"
+    model.SUSPENDED: _("Sospesa"), model.DONE: _("Fatta"), model.INCOMPLETE: _("Incompleta"),
 }
 # the symbol and the colour of each displayed state on a terminal (§2.2: icon and colour); the colour
 # names of terminal.COLOURS of the cli and the tui: orange, brown and pink need 256 colours, else the
@@ -37,7 +38,7 @@ DISPLAY_COLOURS = {
     TRAVEL: "blue", PAUSE: "yellow", model.SUSPENDED: "orange", model.DONE: "greenish", model.INCOMPLETE: "reddish",
 }
 # the stored states, as the owner names them (2.1)
-STATUSES = {TODO: _("Da fare"), RUNNING: _("In corso"), CLOSED: _("Chiusa")}
+STATUSES = {TODO: pgettext("stato", "Da fare"), RUNNING: _("In corso"), CLOSED: _("Chiusa")}
 PRIORITIES = {0: _("Nessuna"), 1: _("Bassa"), 2: _("Media"), 3: _("Alta"), 4: _("Urgente"), 5: _("Emergenza")}
 ABSENCE_KINDS = {ABSENCE: _("Assenza"), "HOLIDAY": _("Ferie"), "LEAVE": _("Permesso"), "SICK": _("Malattia")}
 # what a command leaves to tell the user (Work.notices), and what a sync does (Store.notices: %s is the
@@ -82,7 +83,6 @@ ERRORS = {
     "invalid_range": _("La fine è prima dell'inizio."),
     "too_short": _("L'attività è troppo breve."),
     "before_segment": _("L'orario è prima dell'ultimo cambio registrato."),
-    "details_missing": _("Manca la descrizione."),
     "planned_only": _("La policy permette di avviare attività solo dai Da fare."),
     "no_working_days": _("Nel periodo non ci sono giorni lavorativi: indica un orario."),
     "tag_not_allowed": _("La policy permette solo i tag delle anagrafiche: «%s» non c'è."),

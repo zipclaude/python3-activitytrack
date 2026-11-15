@@ -76,3 +76,12 @@ def system_language():
 
 def _(text):
     return _catalog.get(text) or text
+
+
+def pgettext(context, text):
+    """
+    [text] said in a [context] when the same Italian word has another translation there ("Da fare" is
+    "To-dos" as a list and "To do" as the state of an activity). The catalogs hold it as "context|text";
+    without that key it is the plain translation of [text].
+    """
+    return _catalog.get(f"{context}|{text}") or _catalog.get(text) or text

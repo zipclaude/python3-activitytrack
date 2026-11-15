@@ -28,7 +28,7 @@
  "Il server non accetta questa versione: aggiorna ActivityTrack sul PC.": "The server does not accept this version: update ActivityTrack on the PC.",
  "Il tuo utente non può sincronizzare: chiedi all'amministratore.": "Your user cannot sync: ask the administrator.",
  "In attesa della prima sincronizzazione…": "Waiting for the first sync…",
- "In lavoro": "At work",
+ "In lavoro": "Working",
  "In pausa": "On pause",
  "In ritardo": "Overdue",
  "In viaggio": "Travelling",
@@ -43,7 +43,6 @@
  "La policy permette solo i tag delle anagrafiche: «%s» non c'è.": "The policy allows only the master data's tags: «%s» is not there.",
  "Lavoro": "Work",
  "Località": "Locality",
- "Manca la descrizione.": "The description is missing.",
  "Nessun elemento con identificativo «%s».": "Nothing with the id «%s».",
  "Nessuna attività in corso.": "No activity running.",
  "Non associato: associa questo PC a un server ActivityTrack Web.": "Not paired: pair this PC with an ActivityTrack Web server.",
@@ -127,5 +126,8 @@
  "Il viaggio di ritorno previsto è stato rimosso.": "The planned return trip was removed.",
  "Un tratto previsto è stato rimosso.": "A planned stretch was removed.",
  "Completa": "Complete",
- "Annulla completamento": "Undo completion"
+ "Annulla completamento": "Undo completion",
+ "stato|Da fare": "To do",
+ "Fatta": "Done",
+ "Incompleta": "Incomplete"
 }

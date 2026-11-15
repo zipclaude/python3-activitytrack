@@ -312,3 +312,19 @@ class LanguageChoiceTest(unittest.TestCase):
                 i18n.set_language(lang)
                 self.assertEqual(texts.language_note(store), text, lang)
             store.close()
+
+    def test_the_button_back_to_the_state_names_the_state(self):
+        # "Da fare" on the button that brings a ticked task back names the state, not the list
+        source = (PACKAGE / "texts.py").read_text(encoding="utf-8")
+        self.assertIn('Action(pgettext("stato", "Da fare"), "untick")', source)
+        self.assertEqual(source.count('_("Da fare")'), 1)  # the list (SHOWS)
+
+    def test_the_words_for_today_are_read_back_as_a_day(self):
+        # an interface suggests _("oggi") as a default day: what the catalogs say must be a day for parse_day
+        from datetime import date
+
+        from activitytrack.app import parse_day
+        today = date(2026, 11, 15)
+        self.assertEqual(parse_day("oggi", today), today)
+        for lang, catalog in _catalogs().items():
+            self.assertEqual(parse_day(catalog["oggi"], today), today, lang)

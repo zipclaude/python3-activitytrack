@@ -322,7 +322,7 @@ def entry_actions(work, e):
         if model.can_uncomplete(e):
             out.append(Action(_("Annulla completamento"), "uncomplete"))
         if not work.real_segments(e["uid"]):
-            out.append(Action(_("Da fare"), "untick"))
+            out.append(Action(pgettext("stato", "Da fare"), "untick"))
         out.append(Action(_("Riapri"), "reopen", WORK))
     if policy.feature("deleteEntries"):
         out.append(Action(_("Elimina"), "delete"))

@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from . import formats
-from .i18n import _, pgettext
+from .i18n import _, pgettext, policy_language
 from . import model
 from .model import ABSENCE, CLOSED, PAUSE, RUNNING, TODO, TRAVEL, WORK
 
@@ -51,6 +51,14 @@ NOTICES = {
     "edit_dropped": _("La modifica a «%s» non è stata applicata: il da fare è stato chiuso o avviato su un "
                       "altro dispositivo."),
 }
+
+
+def language_note(store):
+    """What an interface with a language setting says beside it: the text when the policy's ui.language is
+    there but invalid (the language is English then, i18n.resolve_language), else None."""
+    if policy_language(store).invalid:
+        return _("Lingua forzata sull'inglese da una policy con un valore errato")
+    return None
 
 
 def notice_text(code, title=""):

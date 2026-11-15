@@ -4,15 +4,16 @@ The texts are written in Italian, as the app's and the web's; `_` gives
 them in the language chosen at start. Each package keeps its catalogs in
 a locale folder (<language>.json: Italian text → translation): the
 library's, and the ones an interface adds with add_catalogs() for its own
-texts. The language is the policy's ui.language, else the user's choice
-(where the interface has a setting), else the system's (resolve_language);
-another language than it, en, de, es gets English, and so does a system
-that says none. Interfaces that keep texts in constants set it before
-importing their modules.
+texts. The language is the policy's ui.language (English when it is there
+but is no language of ours), else the user's choice (where the interface
+has a setting), else the system's (resolve_language); another language
+than it, en, de, es gets English, and so does a system that says none.
+Interfaces that keep texts in constants set it before importing their modules.
 """
 
 import json
 import re
+from collections import namedtuple
 from pathlib import Path
 
 LANGUAGES = ("it", "en", "de", "es")
@@ -52,17 +53,32 @@ def set_language(code):
     return _language
 
 
+PolicyLanguage = namedtuple("PolicyLanguage", "code invalid")
+
+
+def policy_language(store):
+    """
+    What the policy says of the language, for the interfaces that show it: PolicyLanguage(code, invalid).
+    (None, False): the policy does not say, the user's choice and the system's apply. ("de", False): the
+    policy forces that language. (None, True): ui.language is there but is not one of LANGUAGES: the
+    language is forced to English (texts.language_note says so). The rest of the policy is not affected.
+    """
+    from .policy import stored
+    policy = stored(store)
+    return PolicyLanguage(policy.language, policy.language_invalid)
+
+
 def resolve_language(store=None, system=None):
     """
-    The interface's language: the policy's ui.language, else the user's choice (the store's state
-    PREFERENCE_KEY), else the system's, else English; a value that is not one of LANGUAGES is ignored at
-    each step. [store]: the local copy (None: only the system's); [system]: the system's language when the
-    caller knows it better (the Qt locale), else system_language().
+    The interface's language: the policy's ui.language (a value that is not a language: English, forced),
+    else the user's choice (the store's state PREFERENCE_KEY, ignored when it is not a language), else the
+    system's, else English. [store]: the local copy (None: only the system's); [system]: the system's
+    language when the caller knows it better (the Qt locale), else system_language().
     """
     chosen = None
     if store is not None:
-        from .policy import stored
-        chosen = stored(store).language or language_of(store.get_state(PREFERENCE_KEY))
+        code, invalid = policy_language(store)
+        chosen = "en" if invalid else code or language_of(store.get_state(PREFERENCE_KEY))
     return chosen or language_of(system if system is not None else system_language()) or "en"
 
 

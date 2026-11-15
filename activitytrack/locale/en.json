@@ -129,5 +129,6 @@
  "Annulla completamento": "Undo completion",
  "stato|Da fare": "To do",
  "Fatta": "Done",
- "Incompleta": "Incomplete"
+ "Incompleta": "Incomplete",
+ "Lingua forzata sull'inglese da una policy con un valore errato": "Language forced to English by a policy with an invalid value"
 }

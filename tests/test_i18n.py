@@ -10,7 +10,7 @@ from pathlib import Path
 from unittest import mock
 
 from activitytrack import i18n, model, pairing, texts
-from activitytrack.policy import Policy
+from activitytrack.policy import Policy, stored
 from activitytrack.store import Store
 
 PACKAGE = Path(i18n.__file__).resolve().parent
@@ -193,6 +193,9 @@ class CatalogsTest(unittest.TestCase):
         self.assertEqual((texts.SHOWS["TODO"], texts.STATUSES[model.TODO]), ("To-dos", "To do"))
 
 
+ABSENT = object()
+
+
 class LanguageChoiceTest(unittest.TestCase):
     """The language is the policy's, else the user's choice, else the system's, else English."""
 
@@ -246,23 +249,66 @@ class LanguageChoiceTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             store = Store(Path(d) / "a.sqlite3")
 
-            def resolved(policy=None, choice=None, system="de_DE"):
-                ui = {"language": policy} if policy is not None else {}
+            def resolved(policy=ABSENT, choice=None, system="de_DE"):
+                ui = {} if policy is ABSENT else {"language": policy}
                 store.set_state("policy", json.dumps({"format": "activitytrack-policy", "schema": 1, "ui": ui}))
                 store.set_state(i18n.PREFERENCE_KEY, choice)
                 return i18n.resolve_language(store, system=system)
 
             self.assertEqual(resolved(), "de")
+            self.assertEqual(resolved(policy=None, system="it_IT"), "it")
             self.assertEqual(resolved(choice="es"), "es")
             self.assertEqual(resolved(policy="it", choice="es"), "it")
             self.assertEqual(resolved(policy="en", choice="es", system="it_IT"), "en")
-            # a value that is not a language of ours is ignored at its step
-            self.assertEqual(resolved(policy="fr", choice="es"), "es")
-            self.assertEqual(resolved(policy="de_AT", choice="es"), "es")
-            self.assertEqual(resolved(policy="fr", choice="xx"), "de")
-            self.assertEqual(resolved(policy="fr", choice="xx", system="fr_FR"), "en")
-            self.assertEqual(resolved(policy=["it"], choice=3, system="C"), "en")
+            # ui.language there but no language of ours (a text, another type): English, forced, whatever
+            # the choice and the system say
+            for value in ("fr", "de_AT", "DE", "", " ", 3, 0, True, False, ["it"], {"it": 1}, 1.5):
+                self.assertEqual(resolved(policy=value, choice="es", system="it_IT"), "en", repr(value))
+            # null is as if absent; a bad choice is ignored (the choice is not the policy)
+            self.assertEqual(resolved(policy=None, choice="es"), "es")
+            self.assertEqual(resolved(choice="xx"), "de")
+            self.assertEqual(resolved(choice="xx", system="fr_FR"), "en")
+            self.assertEqual(resolved(choice=3, system="C"), "en")
             # no policy received at all
             store.set_state("policy", None)
             self.assertEqual(i18n.resolve_language(store, system="es_ES"), "es")
+            store.close()
+
+    def test_what_the_policy_says_of_the_language(self):
+        with tempfile.TemporaryDirectory() as d:
+            store = Store(Path(d) / "a.sqlite3")
+
+            def said(ui, **more):
+                store.set_state("policy", json.dumps({"format": "activitytrack-policy", "schema": 1, **more, "ui": ui}))
+                return i18n.policy_language(store), texts.language_note(store)
+
+            note = "Lingua forzata sull'inglese da una policy con un valore errato"
+            self.assertEqual(said({}), ((None, False), None))
+            self.assertEqual(said({"language": None}), ((None, False), None))
+            self.assertEqual(said({"language": "de"}), (("de", False), None))
+            self.assertEqual(said("not a section"), ((None, False), None))
+            for value in ("fr", "", "de_AT", 3, True, ["de"], {}):
+                self.assertEqual(said({"language": value}), ((None, True), note), repr(value))
+            # a tolerant parser: the rest of the policy stays valid
+            store.set_state("policy", json.dumps({"format": "activitytrack-policy", "schema": 1,
+                                                  "ui": {"language": "xx"}, "features": {"travel": False}}))
+            policy = stored(store)
+            self.assertEqual((policy.language, policy.language_invalid, policy.feature("travel")), (None, True, False))
+            # no policy: nothing to say
+            store.set_state("policy", None)
+            self.assertEqual((i18n.policy_language(store), texts.language_note(store)), ((None, False), None))
+            self.assertEqual(i18n.policy_language(store).invalid, False)
+            store.close()
+
+    def test_the_note_is_in_every_language(self):
+        note = "Lingua forzata sull'inglese da una policy con un valore errato"
+        with tempfile.TemporaryDirectory() as d:
+            store = Store(Path(d) / "a.sqlite3")
+            store.set_state("policy", json.dumps({"format": "activitytrack-policy", "schema": 1,
+                                                  "ui": {"language": "xx"}}))
+            for lang, text in (("it", note), ("en", "Language forced to English by a policy with an invalid value"),
+                               ("de", "Sprache durch eine Richtlinie mit ungültigem Wert auf Englisch festgelegt"),
+                               ("es", "Idioma forzado a inglés por una política con un valor no válido")):
+                i18n.set_language(lang)
+                self.assertEqual(texts.language_note(store), text, lang)
             store.close()

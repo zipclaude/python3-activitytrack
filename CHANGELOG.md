@@ -55,7 +55,10 @@ and is final at the release.
 - `i18n.pgettext(context, text)`: a text with another translation in a context (the state "Da fare" of
   an activity, "To do", against the list of the to-dos); the catalogs hold it as `context|text`.
 - `i18n.resolve_language(store)`: the language of an interface in one place, the policy's
-  `ui.language`, else the user's choice (state `language`), else the system's, else English.
+  `ui.language`, else the user's choice (state `language`), else the system's, else English. A
+  `ui.language` that is there but is no language of ours forces English (the rest of the policy
+  stays valid); `i18n.policy_language(store)` and `texts.language_note(store)` let an interface
+  with a language setting say so.
 
 ### Behaviour
 

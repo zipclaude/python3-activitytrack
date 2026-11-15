@@ -86,9 +86,16 @@ class Policy:
 
     @property
     def language(self):
-        """The interface's language the policy forces (ui.language), or None."""
+        """The interface's language the policy forces (ui.language), or None: absent, or not a language."""
         value = self._section("ui").get("language")
-        return value if value in ("it", "en", "de", "es") else None
+        return value if isinstance(value, str) and value in ("it", "en", "de", "es") else None
+
+    @property
+    def language_invalid(self):
+        """ui.language is there but is not a language of ours (a text we do not have, another type): the
+        interfaces use English then, and say so (i18n.resolve_language). null is the same as absent."""
+        value = self._section("ui").get("language")
+        return value is not None and self.language is None
 
     @property
     def master_free(self):

@@ -115,6 +115,7 @@ class CatalogsTest(unittest.TestCase):
             same = sorted(k for k, v in catalogs[lang].items() if v == catalogs["en"][k])
             self.assertEqual(same, sorted(SAME_AS_ENGLISH[lang]), f"{lang}: left in English")
 
+    @unittest.skipUnless(SCRIPT.exists(), "not in a source tree")
     def test_the_placeholders_are_those_of_the_text(self):
         strings = _strings_module()
         for lang, catalog in _catalogs().items():

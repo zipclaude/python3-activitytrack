@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 Flavio Visentin <flavio-activitytrack@infraconsulting.it>
 """
 Dates and times as the user prefers them, as on ActivityTrack Web (web
 issue #38): European (31/12/2026), American (12/31/2026) or ISO

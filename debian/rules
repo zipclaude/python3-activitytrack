@@ -1,4 +1,6 @@
 #!/usr/bin/make -f
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 Flavio Visentin <flavio-activitytrack@infraconsulting.it>
 export PYBUILD_NAME=activitytrack
 # the tests import the package from the build tree: they go there with it
 export PYBUILD_BEFORE_TEST=cp -r {dir}/tests {build_dir}

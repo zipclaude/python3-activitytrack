@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 Flavio Visentin <flavio-activitytrack@infraconsulting.it>
 # CI of python3-activitytrack on GitLab. No pipeline starts on its own (not on pushes or tags; a merge
 # request into next starts one, see workflow below): start one by hand ("Run pipeline" on a branch or tag) or with the pipelines API.
 # The Linux jobs run on the owner's runner (tag testvm, set in default below), free of

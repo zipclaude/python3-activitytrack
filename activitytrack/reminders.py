@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 Flavio Visentin <flavio-activitytrack@infraconsulting.it>
 """
 The reminders of the phone, on the desktop (docs/DESIGN.md §7; app
 domain/reminder/ReminderPlanner.kt and reminders/ReminderScheduler.kt).

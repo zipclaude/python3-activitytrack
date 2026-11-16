@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 Flavio Visentin <flavio-activitytrack@infraconsulting.it>
 """
 The activity model 1.0 as pure data and functions (app docs/ACTIVITY-MODEL.md; the app's port is
 domain/model and domain/todo/TodoPlan.kt, the web's server web/): the vocabulary, the plan of an

@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 Flavio Visentin <flavio-activitytrack@infraconsulting.it>
 """The order of versions: "1.2.3", "1.2", "1.2.3.1" (a security patch), "1.2.3-beta-1" or "1.2.3-beta.1" (a pre-release
 before its release; beta-9 before beta-10)."""
 

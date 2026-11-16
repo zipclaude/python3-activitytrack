@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 Flavio Visentin <flavio-activitytrack@infraconsulting.it>
 """
 The Home list of the interfaces, over the activity model 1.0 (app ui/home/HomeTabs.kt homeSections; the
 web's port is server web/homelist.py): the TODO activities, the tasks ticked off, the deleted ones and

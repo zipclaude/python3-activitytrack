@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 Flavio Visentin <flavio-activitytrack@infraconsulting.it>
 """
 Who this desktop is paired with, its local copy and its token: what the
 interface and the sync share. Qt-free, so the tests need no display.

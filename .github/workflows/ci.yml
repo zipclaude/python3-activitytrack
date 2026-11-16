@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 Flavio Visentin <flavio-activitytrack@infraconsulting.it>
 # CI of python3-activitytrack on GitHub, the backup of the GitLab project: it mirrors .gitlab-ci.yml
 # (keep the two in step), so the backup can test, package and release on its own if GitLab is unavailable.
 # One thing runs on its own: the push of a pre-release tag (vX.Y.Z-alfa-N, vX.Y.Z-beta-N), which the push

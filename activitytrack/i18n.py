@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 Flavio Visentin <flavio-activitytrack@infraconsulting.it>
 """
 The texts are written in Italian, as the app's and the web's; `_` gives
 them in the language chosen at start. Each package keeps its catalogs in

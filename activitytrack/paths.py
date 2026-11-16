@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 Flavio Visentin <flavio-activitytrack@infraconsulting.it>
 """
 The data folder all the interfaces share (one application, one device):
 $XDG_DATA_HOME/activitytrack (~/.local/share/activitytrack) on Linux,

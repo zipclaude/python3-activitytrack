@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 Flavio Visentin <flavio-activitytrack@infraconsulting.it>
 """
 Activities on the desktop, with the rules of the activity model 1.0 (app docs/ACTIVITY-MODEL.md §3;
 the app's port is EntryStateMachine.kt and EntryRepository.kt, the web's server web/ops.py). Every

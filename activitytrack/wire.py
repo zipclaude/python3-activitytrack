@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 Flavio Visentin <flavio-activitytrack@infraconsulting.it>
 """
 The wire schema this desktop speaks (server docs/SYNC.md §12, app domain/sync/WireVersion.kt).
 

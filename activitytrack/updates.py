@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 Flavio Visentin <flavio-activitytrack@infraconsulting.it>
 """
 Updates of the PC applications (activitytrack#1, server docs/SYNC.md §12.4). The only source is the paired
 server, which relays the signed manifest in sync/head; the only signer trusted is the key whose fingerprint

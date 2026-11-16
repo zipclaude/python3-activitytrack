@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 Flavio Visentin <flavio-activitytrack@infraconsulting.it>
 """
 Time selection on a grid of 5-minute cells, as the app (TimeGrid.kt) and
 ActivityTrack Web: one row per hour, 12 cells per row, a window of

@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 Flavio Visentin <flavio-activitytrack@infraconsulting.it>
 """
 One sync with ActivityTrack Web (server docs/SYNC.md §5, §7, §12; app
 data/sync/SyncEngine.kt): push what changed here, pull what changed there,

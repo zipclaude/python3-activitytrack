@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 Flavio Visentin <flavio-activitytrack@infraconsulting.it>
 """
 Pairing with ActivityTrack Web, as the phone (server docs/SYNC.md §9,
 app domain/sync/Pairing.kt): the web shows a one-time link

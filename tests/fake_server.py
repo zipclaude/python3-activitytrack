@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 Flavio Visentin <flavio-activitytrack@infraconsulting.it>
 """A server in memory with the protocol's rules (SYNC.md §3–§6), for the engine's tests."""
 
 import json

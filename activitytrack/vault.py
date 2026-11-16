@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 Flavio Visentin <flavio-activitytrack@infraconsulting.it>
 """
 The device token, out of the database: in the system's secret store
 (Secret Service — KWallet, GNOME Keyring — on Linux, Credential Manager

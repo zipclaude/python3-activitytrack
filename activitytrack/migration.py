@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 Flavio Visentin <flavio-activitytrack@infraconsulting.it>
 """
 The data migration of the activity model 1.0 (app docs/ACTIVITY-MODEL.md §6, 3.1, 5) for the PC's local
 store: schemas 1 and 2 (to-dos, absences, entries linked to a to-do) become schema 3 (the activity).

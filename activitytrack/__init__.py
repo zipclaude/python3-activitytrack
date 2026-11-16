@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 Flavio Visentin <flavio-activitytrack@infraconsulting.it>
 """
 ActivityTrack on the PC: the rules, the local copy and the sync shared by
 its interfaces (activitytrack-desktop, activitytrack-cli, activitytrack-tui).

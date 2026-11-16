@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 Flavio Visentin <flavio-activitytrack@infraconsulting.it>
 """
 The user's policy, from ActivityTrack Web (`GET api/v1/policy`, server
 docs/SYNC.md §8; the keys in the app's docs/POLICY.md). The desktop reads

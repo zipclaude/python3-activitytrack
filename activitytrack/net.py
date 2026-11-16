@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 Flavio Visentin <flavio-activitytrack@infraconsulting.it>
 """
 The connection to ActivityTrack Web (app sync/SyncHttp.kt): JSON over
 HTTPS under api/v1/. With a pin (self-signed certificate, SYNC.md §9) the

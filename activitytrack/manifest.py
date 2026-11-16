@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 Flavio Visentin <flavio-activitytrack@infraconsulting.it>
 """
 The signed update manifest (activitytrack#1, docs/UPDATES.md): one JSON file
 with the signature inline, a JWS in JSON serialization (RFC 7515):

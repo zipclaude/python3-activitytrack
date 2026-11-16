@@ -52,4 +52,6 @@ flake8 activitytrack tests scripts
 
 ## License
 
-GPL-3.0-or-later.
+Copyright © 2026 Flavio Visentin <flavio-activitytrack@infraconsulting.it>.
+
+The library is free software under the GNU General Public License, version 3 or (at your option) any later version (`GPL-3.0-or-later`, text in [LICENSE](LICENSE)), without any warranty. Every file that can carry a comment starts with its `SPDX-License-Identifier` and `SPDX-FileCopyrightText` lines; the others (JSON, test data, images) are under the same licence.

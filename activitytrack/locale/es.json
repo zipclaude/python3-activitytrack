@@ -22,7 +22,7 @@
  "Il collegamento è incompleto: copialo di nuovo.": "El enlace está incompleto: cópialo de nuevo.",
  "Il server ActivityTrack Web non accetta più questa versione: aggiorna ActivityTrack sul PC. I dati restano qui e si sincronizzano dopo l'aggiornamento.": "El servidor ActivityTrack Web ya no acepta esta versión: actualiza ActivityTrack en el PC. Los datos quedan aquí y se sincronizan tras la actualización.",
  "Il server deve usare HTTPS.": "El servidor debe usar HTTPS.",
- "Il server ha revocato l'associazione di questo PC. I dati restano qui: per sincronizzare di nuovo associalo dalla pagina «Dispositivi» del web.": "El servidor revocó la vinculación de este PC. Los datos quedan aquí: para sincronizar de nuevo, vincúlalo desde la página «Dispositivi» de la web.",
+ "Il server ha revocato l'associazione di questo PC. I dati restano qui: per sincronizzare di nuovo associalo dalla pagina «Dispositivi» del web.": "El servidor revocó la vinculación de este PC. Los datos quedan aquí: para sincronizar de nuevo, vincúlalo desde la página «Dispositivos» de la web.",
  "Il server ha risposto con un errore.": "El servidor respondió con un error.",
  "Il server non accetta questa versione: aggiorna ActivityTrack sul PC.": "El servidor no acepta esta versión: actualiza ActivityTrack en el PC.",
  "Il tuo utente non può sincronizzare: chiedi all'amministratore.": "Tu usuario no puede sincronizar: pregunta al administrador.",
@@ -30,7 +30,7 @@
  "In lavoro": "Trabajando",
  "In pausa": "En pausa",
  "In ritardo": "Con retraso",
- "In viaggio": "De viaje",
+ "In trasferta": "De viaje",
  "Indica almeno 3 caratteri dell'identificativo.": "Indica al menos 3 caracteres del identificador.",
  "L'attività è troppo breve.": "La actividad es demasiado corta.",
  "L'orario è nel futuro.": "La hora está en el futuro.",
@@ -46,7 +46,7 @@
  "Nessuna attività in corso.": "Ninguna actividad en curso.",
  "Non associato: associa questo PC a un server ActivityTrack Web.": "Sin vincular: vincula este PC a un servidor ActivityTrack Web.",
  "Non c'è più (eliminata su un altro dispositivo?).": "Ya no existe (¿eliminada en otro dispositivo?).",
- "Non è un collegamento di associazione: copialo dalla pagina «Dispositivi» del web.": "No es un enlace de vinculación: cópialo de la página «Dispositivi» de la web.",
+ "Non è un collegamento di associazione: copialo dalla pagina «Dispositivi» del web.": "No es un enlace de vinculación: cópialo de la página «Dispositivos» de la web.",
  "Note": "Notas",
  "Oggi": "Hoy",
  "Orario non valido.": "Hora no válida.",
@@ -129,5 +129,8 @@
  "stato|Da fare": "Por hacer",
  "Fatta": "Hecha",
  "Incompleta": "Incompleta",
- "Lingua forzata sull'inglese da una policy con un valore errato": "Forzado a inglés por una política con un valor no válido"
+ "Lingua forzata sull'inglese da una policy con un valore errato": "Forzado a inglés por una política con un valor no válido",
+ "stato|Lavoro": "Trabajo",
+ "stato|Viaggio": "Viaje",
+ "stato|Pausa": "Pausa"
 }

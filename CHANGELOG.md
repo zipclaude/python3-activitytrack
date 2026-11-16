@@ -70,6 +70,11 @@ and is final at the release.
 - The language of an interface that does not know the system's is English (it was Italian when the
   system said nothing, and `LANGUAGE` lists and `C`/`POSIX` were not read as gettext does).
 - The displayed states "Fatta" (done) and "Incompleta" (incomplete) are named as in the app and the web.
+- The displayed states of a running activity are named as in the app: "Lavoro", "Viaggio", "Pausa"
+  (English "Working", "Travelling", "Paused"), no longer "In lavoro", "In viaggio", "In pausa";
+  `texts.MODES` says "In trasferta" for travel, as the app's notification does.
+- `Work.segments` reads the segments once and again only when the store has changed: the lists of
+  a few hundred activities no longer read the whole table for every row.
 
 Various bug fixes.
 

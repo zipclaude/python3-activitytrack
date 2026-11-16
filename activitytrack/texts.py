@@ -16,13 +16,14 @@ FIELDS = {
     "times": _("Tempi"), "todoPriority": _("Priorità"), "todoDue": _("Scadenza"), "todoPlan": _("Pianificazione"),
 }
 
-MODES = {WORK: _("In lavoro"), PAUSE: _("In pausa"), TRAVEL: _("In viaggio")}
+MODES = {WORK: _("In lavoro"), PAUSE: _("In pausa"), TRAVEL: _("In trasferta")}
 KINDS = {WORK: _("Lavoro"), PAUSE: _("Pausa"), TRAVEL: _("Viaggio"), ABSENCE: _("Assenza")}
 
 # the displayed state of an activity (model.display, ACTIVITY-MODEL.md 2.2)
 DISPLAY_STATES = {
     model.DELETED: _("Eliminata"), ABSENCE: _("Assenza"), model.LATE: _("In ritardo"), model.PLANNED: _("Pianificata"),
-    TODO: pgettext("stato", "Da fare"), WORK: _("In lavoro"), TRAVEL: _("In viaggio"), PAUSE: _("In pausa"),
+    TODO: pgettext("stato", "Da fare"), WORK: pgettext("stato", "Lavoro"), TRAVEL: pgettext("stato", "Viaggio"),
+    PAUSE: pgettext("stato", "Pausa"),
     # as the app's and the web's states "Fatta" and "Incompleta"
     model.SUSPENDED: _("Sospesa"), model.DONE: _("Fatta"), model.INCOMPLETE: _("Incompleta"),
 }

@@ -67,7 +67,7 @@ class I18nTest(unittest.TestCase):
 SAME_AS_ITALIAN = {
     "en": {"24 h", "Stop"},
     "de": set(),
-    "es": {"24 h", "Cliente", "Incompleta", "Pausa", "dom", "lun", "mar", "Media", "Alta"},
+    "es": {"24 h", "Cliente", "Incompleta", "Pausa", "stato|Pausa", "dom", "lun", "mar", "Media", "Alta"},
 }
 SAME_AS_ENGLISH = {"de": {"Pausa", "Tag"}, "es": {"24 h"}}
 # the Italian words of the sources that are not interface texts: the words the input accepts, the names
@@ -175,14 +175,14 @@ class CatalogsTest(unittest.TestCase):
 
     def test_the_states_read_in_every_language(self):
         words = {
-            "en": ("Deleted", "Absence", "Late", "Planned", "To do", "Working", "Travelling", "On pause",
+            "en": ("Deleted", "Absence", "Late", "Planned", "To do", "Working", "Travelling", "Paused",
                    "Suspended", "Done", "Incomplete"),
-            "de": ("Gelöscht", "Abwesenheit", "Verspätet", "Geplant", "Zu erledigen", "In Arbeit", "Unterwegs",
-                   "In Pause", "Unterbrochen", "Erledigt", "Unvollständig"),
-            "es": ("Eliminada", "Ausencia", "Con retraso", "Planificada", "Por hacer", "Trabajando", "De viaje",
-                   "En pausa", "Suspendida", "Hecha", "Incompleta"),
-            "it": ("Eliminata", "Assenza", "In ritardo", "Pianificata", "Da fare", "In lavoro", "In viaggio",
-                   "In pausa", "Sospesa", "Fatta", "Incompleta"),
+            "de": ("Gelöscht", "Abwesenheit", "Verspätet", "Geplant", "Zu erledigen", "Arbeit", "Reise", "Pause",
+                   "Unterbrochen", "Erledigt", "Unvollständig"),
+            "es": ("Eliminada", "Ausencia", "Con retraso", "Planificada", "Por hacer", "Trabajo", "Viaje", "Pausa",
+                   "Suspendida", "Hecha", "Incompleta"),
+            "it": ("Eliminata", "Assenza", "In ritardo", "Pianificata", "Da fare", "Lavoro", "Viaggio", "Pausa",
+                   "Sospesa", "Fatta", "Incompleta"),
         }
         for lang, expected in words.items():
             i18n.set_language(lang)

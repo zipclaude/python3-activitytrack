@@ -55,7 +55,7 @@ class AppTest(unittest.TestCase):
         w.start_todo(t)
         info = self.app.entry_info(w.entry(t))
         self.assertEqual((info["display"], info["state"], info["kind"], info["priority"]),
-                         ("WORK", "In lavoro", "ACTIVITY", 3))
+                         ("WORK", "Lavoro", "ACTIVITY", 3))
         self.assertIsNotNone(info["since"])
         w.stop(t)
         self.assertEqual(self.app.entry_info(w.entry(t))["display"], "DONE")

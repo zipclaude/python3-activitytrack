@@ -48,6 +48,33 @@ class WorkTest(unittest.TestCase):
         kw.setdefault("activity", "Rete")
         return self.work.start(StartRequest(**kw))
 
+    def test_the_segments_are_read_once_until_the_store_changes(self):
+        """#24: a list asks for the segments of every activity many times; the table is read once."""
+        uid = self.start()
+        reads = []
+        read_all = self.store.all
+        self.store.all = lambda type_: reads.append(type_) or read_all(type_)
+        first = self.work.segments(uid)
+        for _ in range(5):
+            self.assertEqual(self.work.segments(uid), first)
+            self.work.totals(uid)
+        self.assertEqual(reads.count("segment"), 1)
+        # what a caller does to its copy stays there
+        first[0]["kind"] = "x"
+        self.assertEqual(self.work.segments(uid)[0]["kind"], WORK)
+        # a write of this connection is seen
+        self.now += 10 * MIN
+        self.work.switch(uid, PAUSE)
+        self.assertEqual([s["kind"] for s in self.work.segments(uid)], [WORK, PAUSE])
+        # and one of another connection (the sync's thread, another interface)
+        other = Store(self.store.path)
+        try:
+            seg = self.work.segments(uid)[-1]
+            other.write("segment", seg["uid"], {"kind": TRAVEL}, self.now)
+        finally:
+            other.close()
+        self.assertEqual([s["kind"] for s in self.work.segments(uid)], [WORK, TRAVEL])
+
     def entry(self, uid):
         return self.store.get("entry", uid)
 

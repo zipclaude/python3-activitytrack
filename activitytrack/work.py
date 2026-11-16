@@ -15,7 +15,9 @@ pure rules (displayed state, plan, rounding) are in model.py.
 import functools
 import os
 import re
+import threading
 import uuid
+from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -163,6 +165,8 @@ class Work:
         self.round_stored = round_stored
         self.quanta = dict(DEFAULT_QUANTA, **(quanta or {}))
         self.notices = []
+        # (the store's state, the segments by activity): see _segments_by_entry
+        self._segments = None
 
     def take_notices(self):
         """The pending notices of the commands as the user's words (texts.notice_text), in order and
@@ -198,8 +202,26 @@ class Work:
 
     def segments(self, entry_uid):
         """Every segment of an activity, the planned ones too (`planned`), by time."""
-        segs = [s for s in self.store.all("segment") if s.get("entryUid") == entry_uid]
-        return sorted(segs, key=lambda s: (s.get("startUtcMs") or 0, s.get("endUtcMs") or 2 ** 62))
+        return [dict(s) for s in self._segments_by_entry().get(entry_uid, ())]
+
+    def _segments_by_entry(self):
+        """Every segment grouped by activity and sorted by time, read again only when the store has changed.
+
+        A list asks for the segments of each of its activities, several times each (the state, the totals,
+        the last boundary): reading the whole table at each call made a Home of a few hundred rows parse
+        tens of thousands of JSON texts (#24). The store's state is told by SQLite: `data_version` moves
+        when another connection commits, `total_changes` when this thread's own does anything."""
+        db = self.store.db
+        stamp = (threading.get_ident(), db.execute("PRAGMA data_version").fetchone()[0], db.total_changes)
+        cached = self._segments
+        if cached is None or cached[0] != stamp:
+            index = defaultdict(list)
+            for s in self.store.all("segment"):
+                index[s.get("entryUid")].append(s)
+            for segs in index.values():
+                segs.sort(key=lambda s: (s.get("startUtcMs") or 0, s.get("endUtcMs") or 2 ** 62))
+            cached = self._segments = (stamp, index)
+        return cached[1]
 
     def real_segments(self, entry_uid):
         return model.real(self.segments(entry_uid))

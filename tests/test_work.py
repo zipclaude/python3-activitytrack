@@ -74,6 +74,13 @@ class WorkTest(unittest.TestCase):
         finally:
             other.close()
         self.assertEqual([s["kind"] for s in self.work.segments(uid)], [WORK, TRAVEL])
+        # what a failed command wrote and read is forgotten with it
+        with self.assertRaises(ZeroDivisionError):
+            with self.store.transaction():
+                self.store.write("segment", "ghost", {"entryUid": uid, "kind": PAUSE, "startUtcMs": self.now}, self.now)
+                self.assertEqual(len(self.work.segments(uid)), 3)
+                1 / 0
+        self.assertEqual([s["kind"] for s in self.work.segments(uid)], [WORK, TRAVEL])
 
     def entry(self, uid):
         return self.store.get("entry", uid)

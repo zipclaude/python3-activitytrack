@@ -98,6 +98,9 @@ class Store:
         self._lock = threading.Lock()
         # close() from this thread ends the store; from another, only that thread's connection
         self._owner = threading.get_ident()
+        # how many transactions were undone: what a reader keeps of the store is not good after one
+        # (SQLite's total_changes does not go back)
+        self.rollbacks = 0
         try:
             # executescript commits by itself: not inside transaction()
             self.db.executescript(SCHEMA)
@@ -230,6 +233,7 @@ class Store:
             yield db
         except BaseException:
             db.execute("ROLLBACK")
+            self.rollbacks += 1
             raise
         db.execute("COMMIT")
 

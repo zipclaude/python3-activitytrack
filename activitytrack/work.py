@@ -210,9 +210,11 @@ class Work:
         A list asks for the segments of each of its activities, several times each (the state, the totals,
         the last boundary): reading the whole table at each call made a Home of a few hundred rows parse
         tens of thousands of JSON texts (#24). The store's state is told by SQLite: `data_version` moves
-        when another connection commits, `total_changes` when this thread's own does anything."""
+        when another connection commits, `total_changes` when this thread's own does anything; neither
+        tells a rollback, which the store counts."""
         db = self.store.db
-        stamp = (threading.get_ident(), db.execute("PRAGMA data_version").fetchone()[0], db.total_changes)
+        stamp = (threading.get_ident(), db.execute("PRAGMA data_version").fetchone()[0], db.total_changes,
+                 self.store.rollbacks)
         cached = self._segments
         if cached is None or cached[0] != stamp:
             index = defaultdict(list)

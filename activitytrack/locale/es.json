@@ -13,10 +13,9 @@
  "Da fare": "Pendientes",
  "Data non valida: «%s» (per esempio 2026-11-03, 3/11, oggi, domani).": "Fecha no válida: «%s» (por ejemplo 2026-11-03, 3/11, hoy, mañana).",
  "Descrizione": "Descripción",
- "Dettagli mancanti": "Faltan detalles",
  "Fatte": "Hechas",
  "Funzione disattivata dalla policy.": "Función desactivada por la política.",
- "Giorni precedenti": "Días anteriores",
+ "Giorni precedenti": "Anteriores",
  "Identificativo «%s» ambiguo: scrivine qualche carattere in più.": "Identificador «%s» ambiguo: escribe algunos caracteres más.",
  "Il certificato del server non è valido o non corrisponde al collegamento.": "El certificado del servidor no es válido o no corresponde al enlace.",
  "Il cliente è di un'altra azienda.": "El cliente es de otra empresa.",
@@ -64,7 +63,7 @@
  "Questa versione è più recente del server: va aggiornato il server.": "Esta versión es más reciente que el servidor: hay que actualizar el servidor.",
  "Riprendi": "Reanudar",
  "Ruolo": "Rol",
- "Scadenza": "Vencimiento",
+ "Scadenza": "Fecha límite",
  "Scelta rapida": "Selección rápida",
  "Senza data": "Sin fecha",
  "Serve il cliente (o un viaggio).": "Hace falta el cliente (o un viaje).",
@@ -109,7 +108,7 @@
  "Bassa": "Baja",
  "Media": "Media",
  "Alta": "Alta",
- "Urgente": "Urgente",
+ "Urgenza": "Urgente",
  "Emergenza": "Emergencia",
  "Ferie": "Vacaciones",
  "Permesso": "Permiso",
@@ -130,5 +129,5 @@
  "stato|Da fare": "Por hacer",
  "Fatta": "Hecha",
  "Incompleta": "Incompleta",
- "Lingua forzata sull'inglese da una policy con un valore errato": "Idioma forzado a inglés por una política con un valor no válido"
+ "Lingua forzata sull'inglese da una policy con un valore errato": "Forzado a inglés por una política con un valor no válido"
 }

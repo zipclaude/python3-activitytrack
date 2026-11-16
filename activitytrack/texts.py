@@ -39,7 +39,7 @@ DISPLAY_COLOURS = {
 }
 # the stored states, as the owner names them (2.1)
 STATUSES = {TODO: pgettext("stato", "Da fare"), RUNNING: _("In corso"), CLOSED: _("Chiusa")}
-PRIORITIES = {0: _("Nessuna"), 1: _("Bassa"), 2: _("Media"), 3: _("Alta"), 4: _("Urgente"), 5: _("Emergenza")}
+PRIORITIES = {0: _("Nessuna"), 1: _("Bassa"), 2: _("Media"), 3: _("Alta"), 4: _("Urgenza"), 5: _("Emergenza")}
 ABSENCE_KINDS = {ABSENCE: _("Assenza"), "HOLIDAY": _("Ferie"), "LEAVE": _("Permesso"), "SICK": _("Malattia")}
 # what a command leaves to tell the user (Work.notices), and what a sync does (Store.notices: %s is the
 # activity's title, as typed)
@@ -76,12 +76,12 @@ def sync_notices(session):
 
 # the Home list (app HomeList.kt, HomeTabs.kt)
 SECTIONS = {
-    "overdue": _("In ritardo"), "missing": _("Dettagli mancanti"), "today": _("Oggi"),
+    "overdue": _("In ritardo"), "missing": _("Incompleta"), "today": _("Oggi"),
     "next": _("Prossimi giorni"), "earlier": _("Giorni precedenti"), "no_date": _("Senza data"),
     "ignored": _("Cestino"),
 }
 WINDOWS = {-1: _("Oggi"), 24: _("24 h"), 72: _("3 gg"), 168: _("7 gg"), 720: _("30 gg"), 0: _("Tutti")}
-SHOWS = {"TODO": _("Da fare"), "MISSING": _("Dettagli mancanti"), "DONE": _("Fatte"), "IGNORED": _("Cestino")}
+SHOWS = {"TODO": _("Da fare"), "MISSING": _("Incompleta"), "DONE": _("Fatte"), "IGNORED": _("Cestino")}
 
 ERRORS = {
     "client_required": _("Serve il cliente (o un viaggio)."),

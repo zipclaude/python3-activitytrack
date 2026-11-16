@@ -67,7 +67,7 @@ class I18nTest(unittest.TestCase):
 SAME_AS_ITALIAN = {
     "en": {"24 h", "Stop"},
     "de": set(),
-    "es": {"24 h", "Cliente", "Incompleta", "Pausa", "dom", "lun", "mar", "Media", "Alta", "Urgente"},
+    "es": {"24 h", "Cliente", "Incompleta", "Pausa", "dom", "lun", "mar", "Media", "Alta"},
 }
 SAME_AS_ENGLISH = {"de": {"Pausa", "Tag"}, "es": {"24 h"}}
 # the Italian words of the sources that are not interface texts: the words the input accepts, the names
@@ -174,9 +174,9 @@ class CatalogsTest(unittest.TestCase):
 
     def test_the_states_read_in_every_language(self):
         words = {
-            "en": ("Deleted", "Absence", "Overdue", "Planned", "To do", "Working", "Travelling", "On pause",
+            "en": ("Deleted", "Absence", "Late", "Planned", "To do", "Working", "Travelling", "On pause",
                    "Suspended", "Done", "Incomplete"),
-            "de": ("Gelöscht", "Abwesenheit", "Überfällig", "Geplant", "Zu erledigen", "In Arbeit", "Unterwegs",
+            "de": ("Gelöscht", "Abwesenheit", "Verspätet", "Geplant", "Zu erledigen", "In Arbeit", "Unterwegs",
                    "In Pause", "Unterbrochen", "Erledigt", "Unvollständig"),
             "es": ("Eliminada", "Ausencia", "Con retraso", "Planificada", "Por hacer", "Trabajando", "De viaje",
                    "En pausa", "Suspendida", "Hecha", "Incompleta"),
@@ -306,9 +306,9 @@ class LanguageChoiceTest(unittest.TestCase):
             store = Store(Path(d) / "a.sqlite3")
             store.set_state("policy", json.dumps({"format": "activitytrack-policy", "schema": 1,
                                                   "ui": {"language": "xx"}}))
-            for lang, text in (("it", note), ("en", "Language forced to English by a policy with an invalid value"),
-                               ("de", "Sprache durch eine Richtlinie mit ungültigem Wert auf Englisch festgelegt"),
-                               ("es", "Idioma forzado a inglés por una política con un valor no válido")):
+            for lang, text in (("it", note), ("en", "Forced to English by a policy with an invalid value"),
+                               ("de", "Von einer Richtlinie mit ungültigem Wert auf Englisch festgelegt"),
+                               ("es", "Forzado a inglés por una política con un valor no válido")):
                 i18n.set_language(lang)
                 self.assertEqual(texts.language_note(store), text, lang)
             store.close()

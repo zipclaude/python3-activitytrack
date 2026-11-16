@@ -88,6 +88,12 @@ class UpdatesTest(unittest.TestCase):
         self.assertEqual(0, updates.compare("v0.9.9.0", "0.9.9"))
         self.assertEqual(0, updates.compare("0.9.10-beta-1", "0.9.10-beta.1"))
 
+    def test_a_release_candidate_follows_the_betas_and_precedes_its_release(self):
+        ordered = ["1.0.0-alfa-1", "1.0.0-beta-3", "1.0.0-beta-10", "1.0.0-rc1", "1.0.0-rc2", "1.0.0", "1.0.1-rc1",
+                   "1.0.1"]
+        self.assertEqual(ordered, sorted(reversed(ordered), key=functools.cmp_to_key(updates.compare)))
+        self.assertEqual(-1, updates.compare("1.0.0-beta-3", "1.0.0-rc1"))
+
     def test_nothing_without_pairing_a_key_or_a_manifest(self):
         self.assertEqual(updates.UNPAIRED, self.u.status().state)
         self.pair(key=None)
